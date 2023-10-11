@@ -24,10 +24,22 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const utils_mod = b.addModule("utils", .{
+        .source_file = std.Build.LazyPath.relative("../utils/src/main.zig"),
+    });
+    exe.addModule("utils", utils_mod);
+
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
     b.installArtifact(exe);
+
+    const zap = b.dependency("zap", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    exe.addModule("zap", zap.module("zap"));
+    exe.linkLibrary(zap.artifact("facil.io"));
 
     // This *creates* a Run step in the build graph, to be executed when another
     // step is evaluated that depends on it. The next line below will establish
