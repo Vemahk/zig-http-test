@@ -1,32 +1,32 @@
 const std = @import("std");
-const zap = @import("zap");
-
 const Allocator = std.mem.Allocator;
-const Endpoint = @import("../endpoint.zig").Endpoint;
+
+const zap = @import("zap");
 const Request = zap.SimpleRequest;
 
-const layout_format = @embedFile("../content/layout.html");
+const HttpMethod = @import("../http.zig").HttpMethod;
+const Page = @import("../page.zig");
+const Controllers = @import("../controller.zig");
+const Endpoint = Controllers.Endpoint;
+const Controller = Controllers.Controller;
+const RequestFn = Controllers.RequestFn;
 
-const Self = @This();
+const endpoint = Endpoint{
+    .path = "/",
+    .methodHandler = methodHandler,
+};
 
-var endpoint: Endpoint = undefined;
+pub fn getEndpoint() *const Endpoint {
+    return &endpoint;
+}
 
-pub fn init(a: Allocator) void {
-    endpoint = .{
-        .allocator = a,
-        .path = "/",
-        .get = get,
+fn methodHandler(method: HttpMethod) ?RequestFn {
+    return switch (method) {
+        .Get => get,
+        else => null,
     };
 }
 
-pub fn getEndpointPtr() *const Endpoint {
-    return &Self.endpoint;
-}
-
-fn get(e: *const Endpoint, r: Request) void {
-    var buffer = std.ArrayList(u8).init(e.allocator);
-    defer buffer.deinit();
-    var writer = buffer.writer();
-    std.fmt.format(writer, layout_format, .{ "Hello, World!", "Not really any content..." }) catch return;
-    r.sendBody(buffer.items) catch return;
+fn get(c: Controller, r: Request) void {
+    Page.renderToRequest(r, c.allocator, .{ "", "" }) catch return;
 }

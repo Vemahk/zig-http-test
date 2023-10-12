@@ -1,57 +1,65 @@
 const std = @import("std");
-const zap = @import("zap");
+const Allocator = std.mem.Allocator;
+const AtomicBool = std.atomic.Atomic(bool);
 
-const Endpoint = @import("endpoint.zig").Endpoint;
+const zap = @import("zap");
 const Listener = zap.SimpleHttpListener;
 const ListenerSettings = zap.SimpleHttpListenerSettings;
 const Err = zap.EndpointListenerError;
 const Request = zap.SimpleRequest;
 const RequestFn = zap.SimpleHttpRequestFn;
-const EndpointTrie = @import("path-trie.zig").Trie(*const Endpoint);
-const Allocator = std.mem.Allocator;
+
+const Controllers = @import("controller.zig");
+const Controller = Controllers.Controller;
+const Endpoint = Controllers.Endpoint;
+
+const Router = @import("path-trie.zig").Trie(Controller);
 
 //Singleton? I hardly know 'er!
-const Self = @This();
-
+var has_init: AtomicBool = AtomicBool.init(false);
 var allocator: Allocator = undefined;
-var listener: Listener = undefined;
-var endpoints: EndpointTrie = undefined;
-var not_found_handler: ?RequestFn = null;
+var router: Router = undefined;
+var not_found_handler: RequestFn = defaultNotFound;
 
-pub fn init(a: std.mem.Allocator, l: ListenerSettings) void {
+pub fn init(a: std.mem.Allocator, not_found: ?RequestFn) !void {
+    if (has_init.swap(true, .AcqRel))
+        return error.SingletonReinit;
+
     allocator = a;
-    not_found_handler = l.on_request;
-    endpoints = EndpointTrie.init(a);
-
-    var ls = l; // cpy
-    ls.on_request = onRequest;
-    listener = Listener.init(ls);
+    router = Router.init(a);
+    if (not_found) |alt_not_found|
+        not_found_handler = alt_not_found;
 }
 
 pub fn deinit() void {
-    endpoints.deinit();
+    router.deinit();
 }
 
-pub fn add(e: anytype) !void {
-    e.init(allocator);
-    const endpoint: *const Endpoint = e.getEndpointPtr();
-    const path = endpoint.path;
-    try endpoints.add(path, endpoint);
+pub fn add(endpoint: *const Endpoint) !void {
+    try router.add(endpoint.path, Controller{
+        .allocator = allocator,
+        .endpoint = endpoint,
+    });
 }
 
-pub fn listen() !void {
+pub fn listen(l: ListenerSettings) !void {
+    var ls = l;
+    ls.on_request = route;
+    var listener = Listener.init(ls);
     try listener.listen();
     std.debug.print("Listening on 0.0.0.0:{d}\n", .{listener.settings.port});
 }
 
-fn onRequest(r: Request) void {
+fn route(r: Request) void {
     if (r.path) |p| {
-        if (endpoints.get(p) catch null) |e| {
-            e.onRequest(r);
-            return;
-        }
+        if (router.get(p) catch null) |c|
+            return c.onRequest(r);
     }
-    if (not_found_handler) |foo| {
-        foo(r);
-    }
+
+    return not_found_handler(r);
+}
+
+fn defaultNotFound(r: Request) void {
+    r.setStatus(zap.StatusCode.not_found);
+    r.markAsFinished(true);
 }

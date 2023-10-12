@@ -1,44 +1,67 @@
 const std = @import("std");
-const zap = @import("zap");
-const utils = @import("utils");
+const Allocator = std.mem.Allocator;
 
-const Endpoint = @import("endpoint.zig").Endpoint;
+const Server = @This();
+
+pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{
+        .thread_safe = true,
+    }){};
+
+    {
+        var instance = try Server.init(gpa.allocator());
+        defer instance.deinit();
+        try instance.run();
+    }
+
+    const has_leaked = gpa.detectLeaks();
+    if (has_leaked) std.debug.print("Memory leaks detected!\n", .{});
+}
+
+const zap = @import("zap");
+const Listener = @import("endpoint-listener.zig");
+
+allocator: Allocator,
+
+pub fn init(a: Allocator) !Server {
+    return .{
+        .allocator = a,
+    };
+}
+
+pub fn deinit(self: *Server) void {
+    _ = self;
+}
+
+pub fn run(self: Server) !void {
+    const port = 3000;
+    try Listener.init(self.allocator, notFound);
+    defer Listener.deinit();
+    try buildEndpoints();
+    try Listener.listen(.{
+        .port = port,
+        .on_request = null, // required here, but overriden by Listener.
+        .log = true,
+        .public_folder = "wwwroot",
+    });
+
+    zap.start(.{
+        .threads = 2,
+        .workers = 2,
+    });
+}
 
 fn notFound(req: zap.SimpleRequest) void {
     req.setStatus(zap.StatusCode.not_found);
     req.sendBody(@embedFile("content/static/404.html")) catch return;
 }
 
-const Listener = @import("endpoint-listener.zig");
-
 fn buildEndpoints() !void {
-    try Listener.add(@import("controllers/index.zig"));
-}
+    const controllers = [_]type{
+        @import("controllers/index.zig"),
+    };
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{
-        .thread_safe = true,
-    }){};
-    var allocator = gpa.allocator();
-
-    {
-        const port = 3000;
-        Listener.init(allocator, .{
-            .port = port,
-            .on_request = notFound,
-            .log = true,
-            .public_folder = "wwwroot",
-        });
-        defer Listener.deinit();
-        try buildEndpoints();
-        try Listener.listen();
-
-        zap.start(.{
-            .threads = 2,
-            .workers = 2,
-        });
+    inline for (controllers) |c| {
+        try Listener.add(c.getEndpoint());
     }
-
-    const has_leaked = gpa.detectLeaks();
-    if (has_leaked) std.debug.print("Memory leaks detected!\n", .{});
 }
