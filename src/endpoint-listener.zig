@@ -42,10 +42,11 @@ pub fn add(endpoint: *const Endpoint) !void {
     });
 }
 
+var listener: Listener = undefined;
 pub fn listen(l: ListenerSettings) !void {
     var ls = l;
     ls.on_request = route;
-    var listener = Listener.init(ls);
+    listener = Listener.init(ls);
     try listener.listen();
     std.debug.print("Listening on 0.0.0.0:{d}\n", .{listener.settings.port});
 }
