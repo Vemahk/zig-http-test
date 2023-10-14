@@ -4,16 +4,75 @@ const Allocator = std.mem.Allocator;
 const meta = @import("meta.zig");
 
 pub fn renderField(data: anytype, writer: anytype) !void {
-    const T = @Type(data);
+    const T = @TypeOf(data);
     const info: std.builtin.Type = @typeInfo(T);
-    _ = info;
-    _ = writer;
+
+    switch (info) {
+        .Int, .ComptimeInt => try std.fmt.formatInt(data, 10, std.fmt.Case.upper, std.fmt.FormatOptions{}, writer),
+        .Float, .ComptimeFloat => @compileError("I hate floats, and so should you."),
+        .Pointer => |t| {
+            if (t.size == .One) {
+                try renderField(data.*, writer);
+            } else if (t.size == .Slice and t.child == u8) {
+                try writer.writeAll(data);
+            } else {
+                @compileError("Unsupported pointer type for template rendering: " ++ @typeName(T));
+            }
+        },
+        .Array => |t| {
+            if (t.child == u8) {
+                try writer.writeAll(&data);
+            } else {
+                @compileError("Unsupported array type for template rendering: " ++ @typeName(t.child));
+            }
+        },
+        .Optional => {
+            if (data) |d| try renderField(d, writer);
+        },
+        .Struct => {
+            data.template.render(data.data.writer);
+        },
+        .Null, .Void => {},
+        .Bool => {
+            try writer.writeAll(if (data) "true" else "false");
+        },
+        inline else => @compileError("Unsupported type for template rendering: " ++ @typeName(T)),
+    }
+}
+
+test "rendering anytype" {
+    const expectStr = std.testing.expectEqualStrings;
+
+    const Closure = struct {
+        pub fn doTest(expected: []const u8, data: anytype) !void {
+            var buf: [1024]u8 = undefined;
+            var stream = std.io.fixedBufferStream(&buf);
+            var writer = stream.writer();
+            try renderField(data, writer);
+            try expectStr(expected, buf[0..stream.pos]);
+        }
+    };
+
+    try Closure.doTest("42", 42);
+    try Closure.doTest("-42", -42);
+    try Closure.doTest("42", @as(i32, 42));
+    try Closure.doTest("-42", @as(i32, -42));
+    try Closure.doTest("42", "42");
+    try Closure.doTest("42", @as([]const u8, "42"));
+    try Closure.doTest("", {});
+    try Closure.doTest("", null);
+    try Closure.doTest("42", @as(?i32, 42));
+    try Closure.doTest("", @as(?i32, null));
+    try Closure.doTest("", @as(?*i32, null));
+    try Closure.doTest("42", &42);
+    try Closure.doTest("true", true);
+    try Closure.doTest("false", false);
+    // try Closure.doTest("4.2", 4.2);
+    // try Closure.doTest("-4.2", -4.2);
+    // try Closure.doTest("4.2", @as(f32, 4.2));
 }
 
 pub fn Template(comptime T: type) type {
-    const Field = struct {};
-    _ = Field;
-
     return struct {
         const Self = @This();
 
@@ -21,19 +80,19 @@ pub fn Template(comptime T: type) type {
         html: []const u8,
         markers: []const FieldMarker,
 
-        const field_names = meta.fieldNames(T);
+        const fields = meta.fieldNames(T);
 
         pub fn init(a: Allocator, html_template: [:0]const u8) !Self {
             const logger = std.log.scoped(.template_init);
             var marker_list = std.ArrayList(FieldMarker).init(a);
             defer marker_list.deinit();
 
-            var fields_used = [_]bool{false} ** field_names.len;
+            var fields_used = [_]bool{false} ** fields.len;
 
             var tokenizer = Tokenizer.init(html_template);
             while (tokenizer.next()) |marker| {
                 const index: ?usize = blk: {
-                    for (field_names, 0..) |field, i| {
+                    for (fields, 0..) |field, i| {
                         if (std.mem.eql(u8, field, marker.name))
                             break :blk i;
                     }
@@ -51,7 +110,7 @@ pub fn Template(comptime T: type) type {
 
             for (fields_used, 0..) |b, i| {
                 if (!b) {
-                    logger.warn("Field '{s}' not used in template for {s}", .{ field_names[i], @typeName(T) });
+                    logger.warn("Field '{s}' not used in template for {s}", .{ fields[i], @typeName(T) });
                 }
             }
 
@@ -66,7 +125,8 @@ pub fn Template(comptime T: type) type {
             self.allocator.free(self.markers);
         }
 
-        pub fn render(data: T, writer: anytype) !void {
+        pub fn render(self: Self, data: T, writer: anytype) !void {
+            _ = self;
             _ = writer;
             _ = data;
             const info = @typeInfo(T);
@@ -75,6 +135,13 @@ pub fn Template(comptime T: type) type {
             for (field) |f| {
                 _ = f;
             }
+        }
+
+        pub fn wrap(self: *const Self, data: T) ViewModel(T) {
+            return ViewModel(T){
+                .template = self,
+                .data = data,
+            };
         }
     };
 }
@@ -88,6 +155,16 @@ test "building template works." {
     const TestTemplate = Template(Data);
     var tmp = try TestTemplate.init(std.testing.allocator, html);
     defer tmp.deinit();
+}
+
+/// I name this a bit tounge-in-cheek.
+/// It is a struct that wraps both a "view" and a "model".
+/// It's not really a "view model", though.
+pub fn ViewModel(comptime T: type) type {
+    return struct {
+        template: *const Template(T),
+        data: T,
+    };
 }
 
 const ZTokenizer = std.zig.Tokenizer;
@@ -117,7 +194,7 @@ const Tokenizer = struct {
     pub fn next(self: *Self) ?FieldMarker {
         while (self.index < self.html.len) {
             const start = self.index;
-            var zt = ZTokenizer.init(self.html[start..]);
+            var zt = ZTokenizer.init(self.html[start..]); // I guess this does mean my template syntax is subject to the same change that zig is.
 
             var ztokens: [FieldMarkerTags.len]ZToken = undefined;
             var i: usize = 0;
@@ -136,9 +213,17 @@ const Tokenizer = struct {
                         const marker_start = start + ztokens[0].loc.start;
                         const marker_end = start + ztoken.loc.end;
                         const name_ident = ztokens[2];
-                        const name_start = start + name_ident.loc.start;
-                        const name_end = start + name_ident.loc.end;
+                        var name_start = start + name_ident.loc.start;
+                        var name_end = start + name_ident.loc.end;
+                        if (name_end >= name_start + 3) {
+                            if (self.html[name_start] == '@' and self.html[name_start + 1] == '"' and self.html[name_end - 1] == '"') {
+                                name_start += 2;
+                                name_end -= 1;
+                            }
+                        }
+
                         self.index = marker_end;
+                        if (name_end <= name_start) break;
 
                         return .{
                             .name = self.html[name_start..name_end],
@@ -237,4 +322,39 @@ test "tokenzier" {
     try expectStr("}</html>", html[marker.start + marker.len ..]);
     try expectStr("<html>.{", html[0..marker.start]);
     try expect(tokenizer.next() == null);
+
+    // 10 - string identifiers
+    html = "<html>.{@\"420\"}</html>";
+    tokenizer = Tokenizer.init(html);
+    marker = tokenizer.next() orelse unreachable;
+    try expectStr(".{@\"420\"}", html[marker.start .. marker.start + marker.len]);
+    try expectStr("420", marker.name);
+    try expectStr("</html>", html[marker.start + marker.len ..]);
+    try expectStr("<html>", html[0..marker.start]);
+    try expect(tokenizer.next() == null);
+
+    // 11 - identifiers cannot be blank
+    html = "<html>.{@\"\"}</html>";
+    tokenizer = Tokenizer.init(html);
+    try expect(tokenizer.next() == null);
+
+    // 12 - some bastard token from hell.
+    html = "<html>.{@\".{field_nm}\"}</html>";
+    tokenizer = Tokenizer.init(html);
+    marker = tokenizer.next() orelse unreachable;
+    try expectStr(".{@\".{field_nm}\"}", html[marker.start .. marker.start + marker.len]);
+    try expectStr(".{field_nm}", marker.name);
+    try expectStr("</html>", html[marker.start + marker.len ..]);
+    try expectStr("<html>", html[0..marker.start]);
+    try expect(tokenizer.next() == null);
+}
+
+test {
+    const expectStr = std.testing.expectEqualStrings;
+    const Weird = struct {
+        // I like this better than Rust's approach for accessing tuple elements, honeslty.
+        // ... but it's still strange.
+        @" ": usize,
+    };
+    try expectStr(@typeInfo(Weird).Struct.fields[0].name, " ");
 }
