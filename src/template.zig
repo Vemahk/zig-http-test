@@ -126,14 +126,23 @@ pub fn Template(comptime T: type) type {
         }
 
         pub fn render(self: Self, data: T, writer: anytype) !void {
-            _ = self;
-            _ = writer;
-            _ = data;
             const info = @typeInfo(T);
             const field = info.Struct.fields;
 
-            for (field) |f| {
-                _ = f;
+            var start: usize = 0;
+            for (self.markers) |m| {
+                try writer.writeAll(self.html[start..m.start]);
+                start = m.start + m.len;
+
+                inline for (field) |f| {
+                    if (std.mem.eql(u8, f.name, m.name)) {
+                        try renderField(@field(data, f.name), writer);
+                    }
+                }
+            }
+
+            if (start < self.html.len) {
+                try writer.writeAll(self.html[start..]);
             }
         }
 
@@ -147,14 +156,23 @@ pub fn Template(comptime T: type) type {
 }
 
 test "building template works." {
-    const Data = struct {
-        field_nm: []const u8,
-        second_fld: usize,
+    const a = std.testing.allocator;
+    const Test = struct {
+        pub fn perform(data: anytype, input_html: [:0]const u8, expected: []const u8) !void {
+            const T = @TypeOf(data);
+            const Templ = Template(T);
+            var tmp = try Templ.init(a, input_html);
+            defer tmp.deinit();
+
+            var buf = std.ArrayList(u8).init(a);
+            defer buf.deinit();
+            var writer = buf.writer();
+            try tmp.render(data, writer);
+            try std.testing.expectEqualStrings(expected, buf.items);
+        }
     };
-    const html = "<html>.{field_nm}.{missing_fld}</html>";
-    const TestTemplate = Template(Data);
-    var tmp = try TestTemplate.init(std.testing.allocator, html);
-    defer tmp.deinit();
+
+    try Test.perform(.{ .greeting = "hello", .person = "world" }, "<html>.{greeting}, .{person}!</html>", "<html>hello, world!</html>");
 }
 
 /// I name this a bit tounge-in-cheek.
@@ -349,7 +367,7 @@ test "tokenzier" {
     try expect(tokenizer.next() == null);
 }
 
-test {
+test "odd zig field names" {
     const expectStr = std.testing.expectEqualStrings;
     const Weird = struct {
         // I like this better than Rust's approach for accessing tuple elements, honeslty.
