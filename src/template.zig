@@ -2,8 +2,9 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const meta = @import("meta.zig");
+const HTML = @import("html.zig");
 
-pub fn renderField(data: anytype, writer: anytype) !void {
+pub fn renderDefaultField(data: anytype, writer: anytype) !void {
     const T = @TypeOf(data);
     const info: std.builtin.Type = @typeInfo(T);
 
@@ -12,22 +13,22 @@ pub fn renderField(data: anytype, writer: anytype) !void {
         .Float, .ComptimeFloat => @compileError("I hate floats, and so should you."),
         .Pointer => |t| {
             if (t.size == .One) {
-                try renderField(data.*, writer);
+                try renderDefaultField(data.*, writer);
             } else if (t.size == .Slice and t.child == u8) {
-                try writer.writeAll(data);
+                try renderStr(data, writer, true);
             } else {
                 @compileError("Unsupported pointer type for template rendering: " ++ @typeName(T));
             }
         },
         .Array => |t| {
             if (t.child == u8) {
-                try writer.writeAll(&data);
+                try renderStr(&data, writer, true);
             } else {
                 @compileError("Unsupported array type for template rendering: " ++ @typeName(t.child));
             }
         },
         .Optional => {
-            if (data) |d| try renderField(d, writer);
+            if (data) |d| try renderDefaultField(d, writer);
         },
         .Struct => {
             data.template.render(data.data.writer);
@@ -40,6 +41,14 @@ pub fn renderField(data: anytype, writer: anytype) !void {
     }
 }
 
+fn renderStr(str: []const u8, writer: anytype, html_encode: bool) !void {
+    if (html_encode) {
+        try HTML.encodeAll(str, writer);
+    } else {
+        try writer.writeAll(str);
+    }
+}
+
 test "rendering anytype" {
     const expectStr = std.testing.expectEqualStrings;
 
@@ -48,7 +57,7 @@ test "rendering anytype" {
             var buf: [1024]u8 = undefined;
             var stream = std.io.fixedBufferStream(&buf);
             var writer = stream.writer();
-            try renderField(data, writer);
+            try renderDefaultField(data, writer);
             try expectStr(expected, buf[0..stream.pos]);
         }
     };
@@ -70,6 +79,18 @@ test "rendering anytype" {
     // try Closure.doTest("4.2", 4.2);
     // try Closure.doTest("-4.2", -4.2);
     // try Closure.doTest("4.2", @as(f32, 4.2));
+}
+
+fn htmlEncode(cp: u21) ?*const []const u8 {
+    switch (cp) {
+        '&' => return "&amp;",
+        '<' => return "&lt;",
+        '>' => return "&gt;",
+        '"' => return "&quot;",
+        '\'' => return "&#x27;",
+        '/' => return "&#x2F;",
+        else => return null,
+    }
 }
 
 pub fn Template(comptime T: type) type {
@@ -136,7 +157,7 @@ pub fn Template(comptime T: type) type {
 
                 inline for (field) |f| {
                     if (std.mem.eql(u8, f.name, m.name)) {
-                        try renderField(@field(data, f.name), writer);
+                        try renderDefaultField(@field(data, f.name), writer);
                     }
                 }
             }
@@ -173,6 +194,7 @@ test "building template works." {
     };
 
     try Test.perform(.{ .greeting = "hello", .person = "world" }, "<html>.{greeting}, .{person}!</html>", "<html>hello, world!</html>");
+    try Test.perform(.{ .raw_html = "<h1>High-Class Information Below...</h1>" }, "<html>.{raw_html}</html>", "<html>&lt;h1&gt;High-Class Information Below...&lt;&#x2F;h1&gt;</html>");
 }
 
 /// I name this a bit tounge-in-cheek.

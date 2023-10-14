@@ -1,8 +1,12 @@
 const std = @import("std");
-const zap = @import("zap");
 const Allocator = std.mem.Allocator;
+
+const zap = @import("zap");
 const Request = zap.SimpleRequest;
+
 const HttpMethod = @import("http.zig").HttpMethod;
+
+const Template = @import("template.zig").Template;
 
 pub const RequestFn = *const fn (self: Controller, r: Request) void;
 
@@ -23,6 +27,14 @@ pub const Controller = struct {
             std.debug.print("unknown method: {?s}\n", .{r.method});
             return stop(r, .bad_request);
         }
+    }
+
+    pub fn renderBody(self: Self, comptime T: type, data: T, template: Template(T), r: Request) void {
+        var buf = std.ArrayList(u8).init(self.allocator);
+        defer buf.deinit();
+        var writer = buf.writer();
+        template.render(data, writer) catch return stop(r, .internal_server_error);
+        r.sendBody(buf.items) catch return stop(r, .internal_server_error);
     }
 };
 

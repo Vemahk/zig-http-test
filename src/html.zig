@@ -17,7 +17,7 @@ pub fn encodeAll(str: []const u8, writer: anytype) !void {
     var iter = view.iterator();
 
     while (iter.nextCodepointSlice()) |cs| {
-        var cp = try std.unicode.utf8Decode(cs);
+        const cp = try std.unicode.utf8Decode(cs);
         if (encode(cp)) |encoded| {
             try writer.writeAll(encoded);
         } else {
@@ -28,13 +28,22 @@ pub fn encodeAll(str: []const u8, writer: anytype) !void {
 
 pub fn encodeAllBuf(str: []const u8, out: []u8) ![]u8 {
     var stream = std.io.fixedBufferStream(out);
-    var writer = stream.writer();
+    const writer = stream.writer();
     try encodeAll(str, writer);
     return out[0..stream.pos];
 }
 
+/// The caller is responsible for freeing the returned slice.
+pub fn encodeToOwned(str: []const u8, a: std.mem.Allocator) ![]const u8 {
+    var arr = std.ArrayList(u8).init(a);
+    defer arr.deinit();
+    const writer = arr.writer();
+    try encodeAll(str, writer);
+    return arr.toOwnedSlice();
+}
+
 test "then html encodes" {
-    var buffer: [1024]u8 = undefined;
+    const a = std.testing.allocator;
     const input = [_][]const u8{
         "<h1>Hello, World!</h1>",
         "&<>\"'/",
@@ -45,7 +54,8 @@ test "then html encodes" {
     };
 
     inline for (input, output) |str, expected| {
-        const actual = try encodeAllBuf(str, &buffer);
+        const actual = try encodeToOwned(str, a);
+        defer a.free(actual);
         try std.testing.expectEqualStrings(expected, actual);
     }
 }
