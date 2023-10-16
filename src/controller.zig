@@ -29,7 +29,7 @@ pub const Controller = struct {
         }
     }
 
-    pub fn renderBody(self: Self, comptime T: type, data: T, template: Template(T), r: Request) !void {
+    pub fn renderBody(self: Self, data: anytype, template: *const Template(@TypeOf(data)), r: Request) !void {
         var buf = std.ArrayList(u8).init(self.allocator);
         defer buf.deinit();
         var writer = buf.writer();

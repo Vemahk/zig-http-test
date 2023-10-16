@@ -98,19 +98,23 @@ pub fn Template(comptime T: type) type {
         const Self = @This();
 
         allocator: Allocator,
-        html: []const u8,
+        html: [:0]const u8,
         markers: []const FieldMarker,
 
         const fields = meta.fieldNames(T);
 
-        pub fn init(a: Allocator, html_template: [:0]const u8) !Self {
+        pub fn init(a: Allocator, html_template: []const u8) !Self {
+            var html_copy = try a.allocSentinel(u8, html_template.len, 0);
+            errdefer a.free(html_copy);
+            @memcpy(html_copy, html_template);
+
             const logger = std.log.scoped(.template_init);
             var marker_list = std.ArrayList(FieldMarker).init(a);
             defer marker_list.deinit();
 
             var fields_used = [_]bool{false} ** fields.len;
 
-            var tokenizer = Tokenizer.init(html_template);
+            var tokenizer = Tokenizer.init(html_copy);
             while (tokenizer.next()) |marker| {
                 const index: ?usize = blk: {
                     for (fields, 0..) |field, i| {
@@ -137,23 +141,24 @@ pub fn Template(comptime T: type) type {
 
             return Self{
                 .allocator = a,
-                .html = html_template,
+                .html = html_copy,
                 .markers = try marker_list.toOwnedSlice(),
             };
         }
 
         pub fn initFromFile(a: Allocator, file: []const u8) !Self {
             const max_size = 1 << 20; // 1MB, why not.
-            var f: std.fs.File = std.fs.cwd().openFile(file, .{});
+            var f: std.fs.File = try std.fs.cwd().openFile(file, .{});
             defer f.close();
-            f.readToEndAllocOptions(a, max_size, null, @alignOf(u8), 0);
+            const file_text = try f.readToEndAllocOptions(a, max_size, null, @alignOf(u8), 0);
+            defer a.free(file_text);
 
-            const real_file = std.fs.realpathAlloc(a, file);
-            defer a.free(real_file);
+            return try init(a, file_text);
         }
 
-        pub fn deinit(self: *Self) void {
+        pub fn deinit(self: Self) void {
             self.allocator.free(self.markers);
+            self.allocator.free(self.html);
         }
 
         pub fn render(self: Self, data: T, writer: anytype) !void {
@@ -196,8 +201,36 @@ test "building template works." {
         }
     };
 
+    try Test.perform(.{ .val = 50 }, "<h1>.{val}</h1>", "<h1>50</h1>");
     try Test.perform(.{ .greeting = "hello", .person = "world" }, "<html>.{greeting}, .{person}!</html>", "<html>hello, world!</html>");
     try Test.perform(.{ .raw_html = "<h1>High-Class Information Below...</h1>" }, "<html>.{raw_html}</html>", "<html>&lt;h1&gt;High-Class Information Below...&lt;&#x2F;h1&gt;</html>");
+}
+
+test "building template from file" {
+    const a = std.testing.allocator;
+    const cwd = std.fs.cwd();
+    const Data = struct {
+        num: usize,
+    };
+    const content = "<h1>.{num}</h1>";
+    const file_path = "test.txt";
+
+    {
+        const f = try cwd.createFile(file_path, .{});
+        defer f.close();
+        try f.writeAll(content);
+    }
+
+    const tmpl = try Template(Data).initFromFile(a, file_path);
+    defer tmpl.deinit();
+
+    var buf = std.ArrayList(u8).init(a);
+    defer buf.deinit();
+    const writer = buf.writer();
+    try tmpl.render(.{ .num = 50 }, writer);
+
+    const expectStr = std.testing.expectEqualStrings;
+    try expectStr("<h1>50</h1>", buf.items);
 }
 
 const ZTokenizer = std.zig.Tokenizer;

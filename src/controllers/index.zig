@@ -27,7 +27,7 @@ fn methodHandler(method: HttpMethod) ?RequestFn {
 }
 
 fn get(c: Controller, r: Request) !void {
-    
-    const tmpl = try @import("../templates/layout.zig").get(c.allocator);
-    c.renderBody(Page, Page{ .title = "Finally!", .content = "<h1>Progress!</h1>" }, tmpl.?, r);
+    const Layout = @import("../templates/layout.zig");
+    const tmpl = try Layout.Template.get(c.allocator);
+    try c.renderBody(Layout.Data{ .title = "Finally!", .content = "<h1>Progress!</h1>" }, tmpl, r);
 }
