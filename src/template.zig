@@ -114,6 +114,7 @@ pub fn Template(comptime T: type) type {
 
             var fields_used = [_]bool{false} ** fields.len;
 
+            //TODO: if zig every supports comptime allocators, make this comptime-able.
             var tokenizer = Tokenizer.init(html_copy);
             while (tokenizer.next()) |marker| {
                 const index: ?usize = blk: {
