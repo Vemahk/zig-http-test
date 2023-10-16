@@ -21,12 +21,11 @@ pub fn main() !void {
 const zap = @import("zap");
 const Listener = @import("endpoint-listener.zig");
 
-allocator: Allocator,
+var allocator: ?Allocator = null;
 
 pub fn init(a: Allocator) !Server {
-    return .{
-        .allocator = a,
-    };
+    allocator = a;
+    return .{};
 }
 
 pub fn deinit(self: *Server) void {
@@ -34,8 +33,9 @@ pub fn deinit(self: *Server) void {
 }
 
 pub fn run(self: Server) !void {
+    _ = self;
     const port = 3000;
-    try Listener.init(self.allocator, notFound);
+    try Listener.init(allocator.?, notFound);
     defer Listener.deinit();
     try buildEndpoints();
     try Listener.listen(.{
@@ -53,7 +53,14 @@ pub fn run(self: Server) !void {
 
 fn notFound(req: zap.SimpleRequest) void {
     req.setStatus(zap.StatusCode.not_found);
-    req.sendBody(@embedFile("content/static/404.html")) catch return;
+    const Layout = @import("templates/layout.zig");
+    const tmpl = Layout.Template.get(allocator.?) catch return;
+    var buf = std.ArrayList(u8).init(allocator.?);
+    defer buf.deinit();
+    const writer = buf.writer();
+    //TODO: add no-html-encode option.
+    tmpl.render(Layout.Data{ .title = "Not Found!", .content = "<h1>The requested content could not be found.</h1>" }, writer) catch return;
+    req.sendBody(buf.items) catch return;
 }
 
 fn buildEndpoints() !void {

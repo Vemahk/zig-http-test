@@ -14,6 +14,8 @@ fn initOptions(comptime T: type, comptime file_path: []const u8, comptime opts: 
         var tmpl: ?Template(T) = null;
         pub fn get(allocator: std.mem.Allocator) !*const Template(T) {
             if (tmpl == null) {
+                //TODO: these are never deinited... do we care?
+                //TODO: make creation thread-safe.
                 const result = if (opts.embed_html) Template(T).init(allocator, @embedFile(file_path)) else Template(T).initFromFile(allocator, file_path);
 
                 tmpl = result catch |err| {
