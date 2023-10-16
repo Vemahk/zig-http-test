@@ -24,11 +24,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const utils_mod = b.addModule("utils", .{
-        .source_file = std.Build.LazyPath.relative("../utils/src/main.zig"),
-    });
-    exe.addModule("utils", utils_mod);
-
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
