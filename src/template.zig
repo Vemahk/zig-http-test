@@ -142,6 +142,16 @@ pub fn Template(comptime T: type) type {
             };
         }
 
+        pub fn initFromFile(a: Allocator, file: []const u8) !Self {
+            const max_size = 1 << 20; // 1MB, why not.
+            var f: std.fs.File = std.fs.cwd().openFile(file, .{});
+            defer f.close();
+            f.readToEndAllocOptions(a, max_size, null, @alignOf(u8), 0);
+
+            const real_file = std.fs.realpathAlloc(a, file);
+            defer a.free(real_file);
+        }
+
         pub fn deinit(self: *Self) void {
             self.allocator.free(self.markers);
         }
@@ -166,13 +176,6 @@ pub fn Template(comptime T: type) type {
                 try writer.writeAll(self.html[start..]);
             }
         }
-
-        pub fn wrap(self: *const Self, data: T) ViewModel(T) {
-            return ViewModel(T){
-                .template = self,
-                .data = data,
-            };
-        }
     };
 }
 
@@ -195,16 +198,6 @@ test "building template works." {
 
     try Test.perform(.{ .greeting = "hello", .person = "world" }, "<html>.{greeting}, .{person}!</html>", "<html>hello, world!</html>");
     try Test.perform(.{ .raw_html = "<h1>High-Class Information Below...</h1>" }, "<html>.{raw_html}</html>", "<html>&lt;h1&gt;High-Class Information Below...&lt;&#x2F;h1&gt;</html>");
-}
-
-/// I name this a bit tounge-in-cheek.
-/// It is a struct that wraps both a "view" and a "model".
-/// It's not really a "view model", though.
-pub fn ViewModel(comptime T: type) type {
-    return struct {
-        template: *const Template(T),
-        data: T,
-    };
 }
 
 const ZTokenizer = std.zig.Tokenizer;
@@ -392,7 +385,7 @@ test "tokenzier" {
 test "odd zig field names" {
     const expectStr = std.testing.expectEqualStrings;
     const Weird = struct {
-        // I like this better than Rust's approach for accessing tuple elements, honeslty.
+        // I like this better than Rust's approach for accessing tuple elements, honestly.
         // ... but it's still strange.
         @" ": usize,
     };

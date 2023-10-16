@@ -8,7 +8,7 @@ const HttpMethod = @import("http.zig").HttpMethod;
 
 const Template = @import("template.zig").Template;
 
-pub const RequestFn = *const fn (self: Controller, r: Request) void;
+pub const RequestFn = *const fn (self: Controller, r: Request) anyerror!void;
 
 pub const Controller = struct {
     const Self = @This();
@@ -19,22 +19,22 @@ pub const Controller = struct {
     pub fn onRequest(self: Self, r: Request) void {
         if (HttpMethod.fromStr(r.method)) |m| {
             if (self.endpoint.methodHandler(m)) |f| {
-                f(self, r);
+                return f(self, r) catch stop(r, .internal_server_error);
             } else {
                 return stop(r, .method_not_allowed);
             }
         } else {
-            std.debug.print("unknown method: {?s}\n", .{r.method});
+            std.log.warn("unknown method: {?s}\n", .{r.method});
             return stop(r, .bad_request);
         }
     }
 
-    pub fn renderBody(self: Self, comptime T: type, data: T, template: Template(T), r: Request) void {
+    pub fn renderBody(self: Self, comptime T: type, data: T, template: Template(T), r: Request) !void {
         var buf = std.ArrayList(u8).init(self.allocator);
         defer buf.deinit();
         var writer = buf.writer();
-        template.render(data, writer) catch return stop(r, .internal_server_error);
-        r.sendBody(buf.items) catch return stop(r, .internal_server_error);
+        try template.render(data, writer);
+        try r.sendBody(buf.items);
     }
 };
 
