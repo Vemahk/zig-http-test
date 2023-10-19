@@ -1,5 +1,7 @@
 const std = @import("std");
-const Template = @import("../template.zig").Template;
+
+const TemplateNS = @import("../template.zig");
+const Template = TemplateNS.Template;
 
 pub const TemplaterOptions = struct {
     embed_html: bool = false,
@@ -16,9 +18,11 @@ fn initOptions(comptime T: type, comptime file_path: []const u8, comptime opts: 
             if (tmpl == null) {
                 //TODO: these are never deinited... do we care?
                 //TODO: make creation thread-safe.
-                const result = if (opts.embed_html) Template(T).init(allocator, @embedFile(file_path)) else Template(T).initFromFile(allocator, file_path);
 
-                tmpl = result catch |err| {
+                tmpl = (if (opts.embed_html)
+                    Template(T).init(allocator, @embedFile(file_path))
+                else
+                    Template(T).initFromFile(allocator, file_path)) catch |err| {
                     std.log.err("Failed to generate Template from {s}\n", .{file_path});
                     return err;
                 };

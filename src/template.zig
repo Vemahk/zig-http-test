@@ -4,7 +4,11 @@ const Allocator = std.mem.Allocator;
 const meta = @import("meta.zig");
 const HTML = @import("html.zig");
 
-pub fn renderDefaultField(data: anytype, writer: anytype) !void {
+pub const RenderOptions = struct {
+    html_encode: bool = true,
+};
+
+pub fn renderField(data: anytype, writer: anytype, opts: RenderOptions) !void {
     const T = @TypeOf(data);
     const info: std.builtin.Type = @typeInfo(T);
 
@@ -13,25 +17,22 @@ pub fn renderDefaultField(data: anytype, writer: anytype) !void {
         .Float, .ComptimeFloat => @compileError("I hate floats, and so should you."),
         .Pointer => |t| {
             if (t.size == .One) {
-                try renderDefaultField(data.*, writer);
+                try renderField(data.*, writer, opts);
             } else if (t.size == .Slice and t.child == u8) {
-                try renderStr(data, writer, true);
+                try renderStr(data, writer, opts.html_encode);
             } else {
                 @compileError("Unsupported pointer type for template rendering: " ++ @typeName(T));
             }
         },
         .Array => |t| {
             if (t.child == u8) {
-                try renderStr(&data, writer, true);
+                try renderStr(&data, writer, opts.html_encode);
             } else {
                 @compileError("Unsupported array type for template rendering: " ++ @typeName(t.child));
             }
         },
         .Optional => {
-            if (data) |d| try renderDefaultField(d, writer);
-        },
-        .Struct => {
-            data.template.render(data.data.writer);
+            if (data) |d| try renderField(d, writer, opts);
         },
         .Null, .Void => {},
         .Bool => {
@@ -57,7 +58,7 @@ test "rendering anytype" {
             var buf: [1024]u8 = undefined;
             var stream = std.io.fixedBufferStream(&buf);
             var writer = stream.writer();
-            try renderDefaultField(data, writer);
+            try renderField(data, writer, .{});
             try expectStr(expected, buf[0..stream.pos]);
         }
     };
@@ -81,18 +82,6 @@ test "rendering anytype" {
     // try Closure.doTest("4.2", @as(f32, 4.2));
 }
 
-fn htmlEncode(cp: u21) ?*const []const u8 {
-    switch (cp) {
-        '&' => return "&amp;",
-        '<' => return "&lt;",
-        '>' => return "&gt;",
-        '"' => return "&quot;",
-        '\'' => return "&#x27;",
-        '/' => return "&#x2F;",
-        else => return null,
-    }
-}
-
 pub fn Template(comptime T: type) type {
     return struct {
         const Self = @This();
@@ -114,12 +103,12 @@ pub fn Template(comptime T: type) type {
 
             var fields_used = [_]bool{false} ** fields.len;
 
-            //TODO: if zig every supports comptime allocators, make this comptime-able.
+            //TODO: if zig ever supports comptime allocators, make this comptime-able.
             var tokenizer = Tokenizer.init(html_copy);
             while (tokenizer.next()) |marker| {
                 const index: ?usize = blk: {
                     for (fields, 0..) |field, i| {
-                        if (std.mem.eql(u8, field, marker.name))
+                        if (std.mem.eql(u8, field, marker.name_range.of(html_copy)))
                             break :blk i;
                     }
 
@@ -130,7 +119,7 @@ pub fn Template(comptime T: type) type {
                     fields_used[i] = true;
                     try marker_list.append(marker);
                 } else {
-                    logger.warn("Detected unknown field in template ({s}): '{s}'", .{ @typeName(T), marker.name });
+                    logger.warn("Detected unknown field in template ({s}): '{s}'", .{ @typeName(T), marker.name_range.of(html_copy) });
                 }
             }
 
@@ -163,17 +152,22 @@ pub fn Template(comptime T: type) type {
         }
 
         pub fn render(self: Self, data: T, writer: anytype) !void {
+            try self.renderOpts(data, writer, .{});
+        }
+
+        pub fn renderOpts(self: Self, data: T, writer: anytype, opts: RenderOptions) !void {
             const info = @typeInfo(T);
             const field = info.Struct.fields;
 
             var start: usize = 0;
             for (self.markers) |m| {
-                try writer.writeAll(self.html[start..m.start]);
-                start = m.start + m.len;
+                const r = m.marker_range;
+                try writer.writeAll(self.html[start..r.start]);
+                start = r.end;
 
                 inline for (field) |f| {
-                    if (std.mem.eql(u8, f.name, m.name)) {
-                        try renderDefaultField(@field(data, f.name), writer);
+                    if (std.mem.eql(u8, f.name, m.name_range.of(self.html))) {
+                        try renderField(@field(data, f.name), writer, opts);
                     }
                 }
             }
@@ -188,7 +182,7 @@ pub fn Template(comptime T: type) type {
 test "building template works." {
     const a = std.testing.allocator;
     const Test = struct {
-        pub fn perform(data: anytype, input_html: [:0]const u8, expected: []const u8) !void {
+        pub fn perform(data: anytype, input_html: [:0]const u8, expected: []const u8, opts: RenderOptions) !void {
             const T = @TypeOf(data);
             const Templ = Template(T);
             var tmp = try Templ.init(a, input_html);
@@ -197,14 +191,15 @@ test "building template works." {
             var buf = std.ArrayList(u8).init(a);
             defer buf.deinit();
             var writer = buf.writer();
-            try tmp.render(data, writer);
+            try tmp.renderOpts(data, writer, opts);
             try std.testing.expectEqualStrings(expected, buf.items);
         }
     };
 
-    try Test.perform(.{ .val = 50 }, "<h1>.{val}</h1>", "<h1>50</h1>");
-    try Test.perform(.{ .greeting = "hello", .person = "world" }, "<html>.{greeting}, .{person}!</html>", "<html>hello, world!</html>");
-    try Test.perform(.{ .raw_html = "<h1>High-Class Information Below...</h1>" }, "<html>.{raw_html}</html>", "<html>&lt;h1&gt;High-Class Information Below...&lt;&#x2F;h1&gt;</html>");
+    try Test.perform(.{ .val = 50 }, "<h1>.{val}</h1>", "<h1>50</h1>", .{});
+    try Test.perform(.{ .greeting = "hello", .person = "world" }, "<html>.{greeting}, .{person}!</html>", "<html>hello, world!</html>", .{});
+    try Test.perform(.{ .raw_html = "<h1>High-Class Information Below...</h1>" }, "<html>.{raw_html}</html>", "<html>&lt;h1&gt;High-Class Information Below...&lt;&#x2F;h1&gt;</html>", .{});
+    try Test.perform(.{ .no_encode = "<h1>Bold!</h1>" }, "<html>.{no_encode}</html>", "<html><h1>Bold!</h1></html>", .{ .html_encode = false });
 }
 
 test "building template from file" {
@@ -216,11 +211,9 @@ test "building template from file" {
     const content = "<h1>.{num}</h1>";
     const file_path = "test.txt";
 
-    {
-        const f = try cwd.createFile(file_path, .{});
-        defer f.close();
-        try f.writeAll(content);
-    }
+    const f = try cwd.createFile(file_path, .{});
+    try f.writeAll(content);
+    f.close();
 
     const tmpl = try Template(Data).initFromFile(a, file_path);
     defer tmpl.deinit();
@@ -232,18 +225,37 @@ test "building template from file" {
 
     const expectStr = std.testing.expectEqualStrings;
     try expectStr("<h1>50</h1>", buf.items);
+    try cwd.deleteFile(file_path);
 }
 
 const ZTokenizer = std.zig.Tokenizer;
 const ZToken = std.zig.Token;
 const FieldMarkerTags = [_]ZToken.Tag{ .period, .l_brace, .identifier, .r_brace };
 
-const FieldMarker = struct {
-    const Self = @This();
-
-    name: []const u8,
+const StrRange = struct {
     start: usize,
-    len: usize,
+    end: usize,
+
+    pub fn len(self: @This()) usize {
+        return self.end - self.start;
+    }
+
+    pub fn of(self: @This(), slice: []const u8) []const u8 {
+        return slice[self.start..self.end];
+    }
+
+    pub fn before(self: @This(), slice: []const u8) []const u8 {
+        return slice[0..self.start];
+    }
+
+    pub fn after(self: @This(), slice: []const u8) []const u8 {
+        return slice[self.end..];
+    }
+};
+
+const FieldMarker = struct {
+    marker_range: StrRange,
+    name_range: StrRange,
 };
 
 const Tokenizer = struct {
@@ -277,25 +289,30 @@ const Tokenizer = struct {
                     ztokens[i] = ztoken;
                     i += 1;
                     if (i >= FieldMarkerTags.len) {
-                        const marker_start = start + ztokens[0].loc.start;
-                        const marker_end = start + ztoken.loc.end;
+                        const marker_range = StrRange{
+                            .start = start + ztokens[0].loc.start,
+                            .end = start + ztoken.loc.end,
+                        };
+
                         const name_ident = ztokens[2];
-                        var name_start = start + name_ident.loc.start;
-                        var name_end = start + name_ident.loc.end;
-                        if (name_end >= name_start + 3) {
-                            if (self.html[name_start] == '@' and self.html[name_start + 1] == '"' and self.html[name_end - 1] == '"') {
-                                name_start += 2;
-                                name_end -= 1;
+                        var name_range = StrRange{
+                            .start = start + name_ident.loc.start,
+                            .end = start + name_ident.loc.end,
+                        };
+
+                        if (name_range.len() >= 3) {
+                            if (self.html[name_range.start] == '@' and self.html[name_range.start + 1] == '"' and self.html[name_range.end - 1] == '"') {
+                                name_range.start += 2;
+                                name_range.end -= 1;
                             }
                         }
 
-                        self.index = marker_end;
-                        if (name_end <= name_start) break;
+                        self.index = marker_range.end;
+                        if (name_range.len() == 0) break;
 
                         return .{
-                            .name = self.html[name_start..name_end],
-                            .start = marker_start,
-                            .len = marker_end - marker_start,
+                            .marker_range = marker_range,
+                            .name_range = name_range,
                         };
                     }
                 } else {
@@ -325,10 +342,10 @@ test "tokenzier" {
     var tokenizer = Tokenizer.init(html);
 
     var marker = tokenizer.next() orelse unreachable;
-    try expectStr(".{field_nm}", html[marker.start .. marker.start + marker.len]);
-    try expectStr("field_nm", marker.name);
-    try expectStr("</html>", html[marker.start + marker.len ..]);
-    try expectStr("<html>", html[0..marker.start]);
+    try expectStr(".{field_nm}", marker.marker_range.of(html));
+    try expectStr("field_nm", marker.name_range.of(html));
+    try expectStr("<html>", marker.marker_range.before(html));
+    try expectStr("</html>", marker.marker_range.after(html));
 
     try expect(tokenizer.next() == null);
 
@@ -346,10 +363,10 @@ test "tokenzier" {
     html = ".{field_nm}";
     tokenizer = Tokenizer.init(html);
     marker = tokenizer.next() orelse unreachable;
-    try expectStr(".{field_nm}", html[marker.start .. marker.start + marker.len]);
-    try expectStr("field_nm", marker.name);
-    try expectStr("", html[marker.start + marker.len ..]);
-    try expectStr("", html[0..marker.start]);
+    try expectStr(".{field_nm}", marker.marker_range.of(html));
+    try expectStr("field_nm", marker.name_range.of(html));
+    try expectStr("", marker.marker_range.before(html));
+    try expectStr("", marker.marker_range.after(html));
 
     try expect(tokenizer.next() == null);
 
@@ -357,16 +374,16 @@ test "tokenzier" {
     html = "<html>.{field_nm}</html>.{field_nm}";
     tokenizer = Tokenizer.init(html);
     marker = tokenizer.next() orelse unreachable;
-    try expectStr(".{field_nm}", html[marker.start .. marker.start + marker.len]);
-    try expectStr("field_nm", marker.name);
-    try expectStr("</html>.{field_nm}", html[marker.start + marker.len ..]);
-    try expectStr("<html>", html[0..marker.start]);
+    try expectStr(".{field_nm}", marker.marker_range.of(html));
+    try expectStr("field_nm", marker.name_range.of(html));
+    try expectStr("</html>.{field_nm}", marker.marker_range.after(html));
+    try expectStr("<html>", marker.marker_range.before(html));
 
     marker = tokenizer.next() orelse unreachable;
-    try expectStr(".{field_nm}", html[marker.start .. marker.start + marker.len]);
-    try expectStr("field_nm", marker.name);
-    try expectStr("", html[marker.start + marker.len ..]);
-    try expectStr("<html>.{field_nm}</html>", html[0..marker.start]);
+    try expectStr(".{field_nm}", marker.marker_range.of(html));
+    try expectStr("field_nm", marker.name_range.of(html));
+    try expectStr("", marker.marker_range.after(html));
+    try expectStr("<html>.{field_nm}</html>", marker.marker_range.before(html));
 
     try expect(tokenizer.next() == null);
 
@@ -384,20 +401,20 @@ test "tokenzier" {
     html = "<html>.{.{field_nm}}</html>";
     tokenizer = Tokenizer.init(html);
     marker = tokenizer.next() orelse unreachable;
-    try expectStr(".{field_nm}", html[marker.start .. marker.start + marker.len]);
-    try expectStr("field_nm", marker.name);
-    try expectStr("}</html>", html[marker.start + marker.len ..]);
-    try expectStr("<html>.{", html[0..marker.start]);
+    try expectStr(".{field_nm}", marker.marker_range.of(html));
+    try expectStr("field_nm", marker.name_range.of(html));
+    try expectStr("}</html>", marker.marker_range.after(html));
+    try expectStr("<html>.{", marker.marker_range.before(html));
     try expect(tokenizer.next() == null);
 
     // 10 - string identifiers
     html = "<html>.{@\"420\"}</html>";
     tokenizer = Tokenizer.init(html);
     marker = tokenizer.next() orelse unreachable;
-    try expectStr(".{@\"420\"}", html[marker.start .. marker.start + marker.len]);
-    try expectStr("420", marker.name);
-    try expectStr("</html>", html[marker.start + marker.len ..]);
-    try expectStr("<html>", html[0..marker.start]);
+    try expectStr(".{@\"420\"}", marker.marker_range.of(html));
+    try expectStr("420", marker.name_range.of(html));
+    try expectStr("</html>", marker.marker_range.after(html));
+    try expectStr("<html>", marker.marker_range.before(html));
     try expect(tokenizer.next() == null);
 
     // 11 - identifiers cannot be blank
@@ -409,10 +426,10 @@ test "tokenzier" {
     html = "<html>.{@\".{field_nm}\"}</html>";
     tokenizer = Tokenizer.init(html);
     marker = tokenizer.next() orelse unreachable;
-    try expectStr(".{@\".{field_nm}\"}", html[marker.start .. marker.start + marker.len]);
-    try expectStr(".{field_nm}", marker.name);
-    try expectStr("</html>", html[marker.start + marker.len ..]);
-    try expectStr("<html>", html[0..marker.start]);
+    try expectStr(".{@\".{field_nm}\"}", marker.marker_range.of(html));
+    try expectStr(".{field_nm}", marker.name_range.of(html));
+    try expectStr("</html>", marker.marker_range.after(html));
+    try expectStr("<html>", marker.marker_range.before(html));
     try expect(tokenizer.next() == null);
 }
 

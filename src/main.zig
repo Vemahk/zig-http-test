@@ -58,8 +58,7 @@ fn notFound(req: zap.SimpleRequest) void {
     var buf = std.ArrayList(u8).init(allocator.?);
     defer buf.deinit();
     const writer = buf.writer();
-    //TODO: add no-html-encode option.
-    tmpl.render(Layout.Data{ .title = "Not Found!", .content = "<h1>The requested content could not be found.</h1>" }, writer) catch return;
+    tmpl.renderOpts(Layout.Data{ .title = "Not Found!", .content = "<h1>The requested content could not be found.</h1>" }, writer, .{ .html_encode = false }) catch return;
     req.sendBody(buf.items) catch return;
 }
 
