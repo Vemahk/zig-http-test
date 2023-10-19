@@ -5,4 +5,8 @@ pub fn main() !void {
     try instance.run();
 }
 
+pub const Controllers = [_]type{
+    @import("controllers/index.zig"),
+};
+
 pub const Templates = @import("templates.zig");

@@ -151,11 +151,7 @@ pub fn Template(comptime T: type) type {
             self.allocator.free(self.html);
         }
 
-        pub fn render(self: Self, data: T, writer: anytype) !void {
-            try self.renderOpts(data, writer, .{});
-        }
-
-        pub fn renderOpts(self: Self, data: T, writer: anytype, opts: RenderOptions) !void {
+        pub fn render(self: Self, data: T, writer: anytype, opts: RenderOptions) !void {
             const info = @typeInfo(T);
             const field = info.Struct.fields;
 
@@ -180,7 +176,7 @@ pub fn Template(comptime T: type) type {
         pub fn renderOwned(self: Self, data: T, opts: RenderOptions) !std.ArrayList(u8) {
             var buf = std.ArrayList(u8).init(self.allocator);
             errdefer buf.deinit();
-            try self.renderOpts(data, buf.writer(), opts);
+            try self.render(data, buf.writer(), opts);
             return buf;
         }
     };
@@ -195,10 +191,8 @@ test "building template works." {
             var tmp = try Templ.init(a, input_html);
             defer tmp.deinit();
 
-            var buf = std.ArrayList(u8).init(a);
+            const buf = try tmp.renderOwned(data, opts);
             defer buf.deinit();
-            var writer = buf.writer();
-            try tmp.renderOpts(data, writer, opts);
             try std.testing.expectEqualStrings(expected, buf.items);
         }
     };
@@ -225,10 +219,8 @@ test "building template from file" {
     const tmpl = try Template(Data).initFromFile(a, file_path);
     defer tmpl.deinit();
 
-    var buf = std.ArrayList(u8).init(a);
+    const buf = try tmpl.renderOwned(.{ .num = 50 }, .{});
     defer buf.deinit();
-    const writer = buf.writer();
-    try tmpl.render(.{ .num = 50 }, writer);
 
     const expectStr = std.testing.expectEqualStrings;
     try expectStr("<h1>50</h1>", buf.items);
@@ -438,14 +430,4 @@ test "tokenzier" {
     try expectStr("</html>", marker.marker_range.after(html));
     try expectStr("<html>", marker.marker_range.before(html));
     try expect(tokenizer.next() == null);
-}
-
-test "odd zig field names" {
-    const expectStr = std.testing.expectEqualStrings;
-    const Weird = struct {
-        // I like this better than Rust's approach for accessing tuple elements, honestly.
-        // ... but it's still strange.
-        @" ": usize,
-    };
-    try expectStr(@typeInfo(Weird).Struct.fields[0].name, " ");
 }

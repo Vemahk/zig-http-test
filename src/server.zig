@@ -29,7 +29,11 @@ pub fn run(self: Self) !void {
     const port = 3000;
     try Listener.init(alloc(), notFound);
     defer Listener.deinit();
-    try buildEndpoints();
+
+    inline for (@import("root").Controllers) |c| {
+        try Listener.add(c.getEndpoint());
+    }
+
     try Listener.listen(.{
         .port = port,
         .on_request = null, // required here, but overriden by Listener.
@@ -55,14 +59,4 @@ fn notFound(req: zap.SimpleRequest) void {
     defer buf.deinit();
 
     req.sendBody(buf.items) catch return;
-}
-
-fn buildEndpoints() !void {
-    const controllers = [_]type{
-        @import("controllers/index.zig"),
-    };
-
-    inline for (controllers) |c| {
-        try Listener.add(c.getEndpoint());
-    }
 }
