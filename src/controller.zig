@@ -4,9 +4,11 @@ const Allocator = std.mem.Allocator;
 const zap = @import("zap");
 const Request = zap.SimpleRequest;
 
-const HttpMethod = @import("http.zig").HttpMethod;
+const TemplateNS = @import("template.zig");
+const Template = TemplateNS.Template;
+const RenderOptions = TemplateNS.RenderOptions;
 
-const Template = @import("template.zig").Template;
+const HttpMethod = @import("http.zig").HttpMethod;
 
 pub const RequestFn = *const fn (self: Controller, r: Request) anyerror!void;
 
@@ -29,11 +31,11 @@ pub const Controller = struct {
         }
     }
 
-    pub fn renderBody(self: Self, data: anytype, template: *const Template(@TypeOf(data)), r: Request) !void {
-        var buf = std.ArrayList(u8).init(self.allocator);
+    pub fn renderBody(self: Self, r: Request, Tmpl: anytype, data: anytype, opts: RenderOptions) !void {
+        const T = @TypeOf(data);
+        const tmpl: *const Template(T) = try Tmpl.get(self.allocator);
+        const buf = try tmpl.renderOwned(data, opts);
         defer buf.deinit();
-        var writer = buf.writer();
-        try template.render(data, writer);
         try r.sendBody(buf.items);
     }
 };

@@ -176,6 +176,13 @@ pub fn Template(comptime T: type) type {
                 try writer.writeAll(self.html[start..]);
             }
         }
+
+        pub fn renderOwned(self: Self, data: T, opts: RenderOptions) !std.ArrayList(u8) {
+            var buf = std.ArrayList(u8).init(self.allocator);
+            errdefer buf.deinit();
+            try self.renderOpts(data, buf.writer(), opts);
+            return buf;
+        }
     };
 }
 
