@@ -1,4 +1,5 @@
 pub const Layout = init(struct { title: []const u8, content: []const u8 }, "private/templates/layout.html", .{});
+pub const Time = init(struct { timestamp: i64 }, "private/templates/time.html", .{});
 
 const std = @import("std");
 const Template = @import("template.zig").Template;

@@ -1,33 +1,14 @@
-const std = @import("std");
-const Allocator = std.mem.Allocator;
+const C = @import("../controller.zig");
 
-const zap = @import("zap");
-const Request = zap.SimpleRequest;
-
-const HttpMethod = @import("../http.zig").HttpMethod;
-const Controllers = @import("../controller.zig");
-const Endpoint = Controllers.Endpoint;
-const Controller = Controllers.Controller;
-const RequestFn = Controllers.RequestFn;
-
-const endpoint = Endpoint{
+pub const endpoint = C.Endpoint{
     .path = "/",
-    .methodHandler = methodHandler,
+    .get = get,
 };
 
-pub fn getEndpoint() *const Endpoint {
-    return &endpoint;
-}
-
-fn methodHandler(method: HttpMethod) ?RequestFn {
-    return switch (method) {
-        .Get => get,
-        else => null,
-    };
-}
-
-fn get(c: Controller, r: Request) !void {
+fn get(c: C.Controller, r: C.Request) !void {
+    const time_path = @import("root").Controllers.Time.endpoint.path;
+    const content = "The current time is: <div hx-get=\"" ++ time_path ++ "\" hx-trigger=\"load\" hx-swap=\"outerHTML\"></div>";
     const Layout = @import("root").Templates.Layout;
-    const data = Layout.Data{ .title = "Finally!", .content = "<h1>Progress!</h1>" };
-    try c.renderBody(r, Layout, data, .{});
+    const data = Layout.Data{ .title = "Finally!", .content = content };
+    try c.renderBody(r, Layout, data, .{ .html_encode = false });
 }

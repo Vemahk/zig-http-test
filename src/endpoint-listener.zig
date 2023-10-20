@@ -35,7 +35,7 @@ pub fn deinit() void {
     router.deinit();
 }
 
-pub fn add(endpoint: *const Endpoint) !void {
+pub fn add(comptime endpoint: Endpoint) !void {
     try router.add(endpoint.path, Controller{
         .allocator = allocator,
         .endpoint = endpoint,

@@ -2,7 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const zap = @import("zap");
-const Request = zap.SimpleRequest;
+pub const Request = zap.SimpleRequest;
 
 const TemplateNS = @import("template.zig");
 const Template = TemplateNS.Template;
@@ -16,7 +16,7 @@ pub const Controller = struct {
     const Self = @This();
 
     allocator: Allocator,
-    endpoint: *const Endpoint,
+    endpoint: Endpoint,
 
     pub fn onRequest(self: Self, r: Request) void {
         if (HttpMethod.fromStr(r.method)) |m| {
@@ -41,8 +41,22 @@ pub const Controller = struct {
 };
 
 pub const Endpoint = struct {
-    path: []const u8,
-    methodHandler: *const fn (method: HttpMethod) ?RequestFn,
+    path: []const u8 = "",
+    get: ?RequestFn = null,
+    post: ?RequestFn = null,
+    put: ?RequestFn = null,
+    delete: ?RequestFn = null,
+    patch: ?RequestFn = null,
+
+    pub fn methodHandler(self: Endpoint, method: HttpMethod) ?RequestFn {
+        switch (method) {
+            .Get => return self.get,
+            .Post => return self.post,
+            .Put => return self.put,
+            .Delete => return self.delete,
+            .Patch => return self.patch,
+        }
+    }
 };
 
 fn stop(r: Request, status: zap.StatusCode) void {

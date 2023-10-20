@@ -30,8 +30,11 @@ pub fn run(self: Self) !void {
     try Listener.init(alloc(), notFound);
     defer Listener.deinit();
 
-    inline for (@import("root").Controllers) |c| {
-        try Listener.add(c.getEndpoint());
+    const ctrls = @import("root").Controllers;
+    const info: std.builtin.Type = @typeInfo(ctrls);
+    const decls = info.Struct.decls;
+    inline for (decls) |decl| {
+        try Listener.add(@field(ctrls, decl.name).endpoint);
     }
 
     try Listener.listen(.{
