@@ -2,6 +2,7 @@ pub const Layout = init(struct { title: []const u8, content: []const u8 }, "priv
 pub const Time = init(struct { timestamp: i64 }, "private/templates/time.html", .{});
 
 const std = @import("std");
+const builtin = @import("builtin");
 const Template = @import("template.zig").Template;
 const TemplaterOptions = struct {
     embed_html: bool = false,
@@ -14,8 +15,9 @@ fn init(comptime T: type, comptime file_path: []const u8, comptime opts: Templat
         var lock: std.Thread.Mutex = .{};
 
         var tmpl: ?Template(T) = null;
+        var load_time: i128 = 0;
         pub fn get(allocator: std.mem.Allocator) !*const Template(T) {
-            if (tmpl == null)
+            if (try should_rebuild())
                 try rebuild(allocator);
 
             return &tmpl.?;
@@ -26,6 +28,7 @@ fn init(comptime T: type, comptime file_path: []const u8, comptime opts: Templat
             defer lock.unlock();
             if (tmpl) |t| t.deinit();
             tmpl = try create(allocator);
+            std.debug.print("(re)Built template of {s}", .{file_path});
         }
 
         fn create(allocator: std.mem.Allocator) !Template(T) {
@@ -36,6 +39,17 @@ fn init(comptime T: type, comptime file_path: []const u8, comptime opts: Templat
                 std.log.err("Failed to generate Template from {s}\n", .{file_path});
                 return err;
             };
+        }
+
+        inline fn should_rebuild() !bool {
+            if (tmpl == null)
+                return true;
+
+            if (builtin.mode != .Debug)
+                return false;
+
+            const stat = try std.fs.cwd().statFile(file_path);
+            return stat.mtime > load_time;
         }
     };
 }
