@@ -3,7 +3,7 @@ pub const Time = init(struct { timestamp: i64 }, "private/templates/time.html", 
 
 const std = @import("std");
 const builtin = @import("builtin");
-const Template = @import("template.zig").Template;
+const Template = @import("template").Template;
 const TemplaterOptions = struct {
     embed_html: bool = false,
 };
@@ -11,8 +11,6 @@ const TemplaterOptions = struct {
 fn init(comptime T: type, comptime file_path: []const u8, comptime opts: TemplaterOptions) type {
     return struct {
         pub const Data = T;
-
-        var lock: std.Thread.Mutex = .{};
 
         var tmpl: ?Template(T) = null;
         var load_time: i128 = 0;
@@ -23,11 +21,13 @@ fn init(comptime T: type, comptime file_path: []const u8, comptime opts: Templat
             return &tmpl.?;
         }
 
+        var lock: std.Thread.Mutex = .{};
         pub fn rebuild(allocator: std.mem.Allocator) !void {
             lock.lock();
             defer lock.unlock();
             if (tmpl) |t| t.deinit();
             tmpl = try create(allocator);
+            load_time = std.time.nanoTimestamp();
             std.debug.print("(re)Built template of {s}", .{file_path});
         }
 

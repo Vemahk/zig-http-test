@@ -29,6 +29,11 @@ pub fn build(b: *std.Build) void {
     // step when running `zig build`).
     b.installArtifact(exe);
 
+    const tmpl_mod = b.addModule("template", .{
+        .source_file = std.Build.LazyPath.relative("lib/template/src/template.zig"),
+    });
+    exe.addModule("template", tmpl_mod);
+
     const zap = b.dependency("zap", .{
         .target = target,
         .optimize = optimize,

@@ -4,7 +4,7 @@ const Allocator = std.mem.Allocator;
 const zap = @import("zap");
 pub const Request = zap.SimpleRequest;
 
-const TemplateNS = @import("template.zig");
+const TemplateNS = @import("template");
 const Template = TemplateNS.Template;
 const RenderOptions = TemplateNS.RenderOptions;
 
