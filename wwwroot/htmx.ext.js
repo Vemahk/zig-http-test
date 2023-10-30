@@ -1,16 +1,17 @@
 htmx.onLoad(function(content){
-    const times = content.querySelectorAll("time.epoch");
+    const times = content.querySelectorAll("time");
     for(let i=0; i<times.length; i++)
         renderEpoch(times[i]);
     
-    if(content.nodeName === "TIME" && content.classList.contains("epoch"))
+    if(content.nodeName === "TIME")
         renderEpoch(content);
 });
 
 function renderEpoch(time) {
-    const epoch = parseInt(time.innerText) * 1000;
+    const epochAttr = time.getAttribute("epoch");
+    if(epochAttr == null) return;
+    const epoch = parseInt(epochAttr) * 1000;
     const date = new Date(epoch);
     time.innerText = date.toLocaleString();
     time.setAttribute("datetime", date.toISOString());
-    time.classList.remove("epoch");
 }

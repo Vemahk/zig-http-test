@@ -15,14 +15,16 @@ test {
     const MyStruct = struct {
         field_one: []const u8,
         field_two: comptime_int,
+        @"ur mum \" gotem": u16,
     };
 
     const field_names = fieldNames(MyStruct);
 
     const expect = std.testing.expect;
-    try expect(field_names.len == 2);
+    try expect(field_names.len == 3);
 
     const expectStr = std.testing.expectEqualStrings;
     try expectStr("field_one", field_names[0]);
     try expectStr("field_two", field_names[1]);
+    try expectStr("ur mum \" gotem", field_names[2]);
 }
