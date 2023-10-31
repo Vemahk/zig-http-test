@@ -8,24 +8,33 @@ pub const RenderOptions = renderer.RenderOptions;
 
 pub fn Template(comptime T: type) type {
     return struct {
-        const info: std.builtin.Type = @typeInfo(T);
-        const fields = info.Struct.fields;
+        const field_names = meta.fieldNames(T);
+        const Field = struct {
+            text_start: usize,
+            field_index: usize,
+        };
 
         const Self = @This();
 
-        html: DeconstructedHtml,
+        allocator: Allocator,
+        tmpl: []const u8,
+        markers: []const Field,
 
-        pub fn init(a: Allocator, html_template: []const u8) !Self {
-            var self = Self{
-                .html = try DeconstructedHtml.init(a, html_template),
-            };
-            errdefer self.deinit();
+        pub fn init(a: Allocator, template_str: []const u8) !Self {
+            var str_buf = std.ArrayList(u8).init(a);
+            defer str_buf.deinit();
+            var marker_buf = std.ArrayList(Field).init(a);
+            defer marker_buf.deinit();
 
-            var fields_used = [_]bool{false} ** fields.len;
-            for (self.html.marker_names) |tmpl_field_nm| {
+            var iter = TemplateIterator.init(a, template_str);
+            var fields_used = [_]bool{false} ** field_names.len;
+            var text_start: usize = 0;
+            while (try iter.next()) |marker| {
+                defer marker.deinit();
+
                 const index: ?usize = blk: {
-                    inline for (fields, 0..) |field, i| {
-                        if (std.mem.eql(u8, field.name, tmpl_field_nm))
+                    inline for (field_names, 0..) |field, i| {
+                        if (std.mem.eql(u8, field, marker.name))
                             break :blk i;
                     }
 
@@ -34,18 +43,38 @@ pub fn Template(comptime T: type) type {
 
                 if (index) |i| {
                     fields_used[i] = true;
+
+                    try str_buf.appendSlice(template_str[text_start..marker.range.start]);
+                    text_start = marker.range.end;
+                    try marker_buf.append(.{
+                        .text_start = str_buf.items.len,
+                        .field_index = i,
+                    });
                 } else {
-                    log.warn("Detected unknown field in template ({s}): '{s}'", .{ @typeName(T), tmpl_field_nm });
+                    log.warn("Detected unknown field in template ({s}): '{s}'", .{ @typeName(T), marker.name });
                 }
             }
 
-            inline for (fields_used, 0..) |b, i| {
+            if (text_start < template_str.len) {
+                try str_buf.appendSlice(template_str[text_start..]);
+            }
+
+            for (fields_used, 0..) |b, i| {
                 if (!b) {
-                    log.warn("Field '{s}' not used in template for {s}", .{ fields[i].name, @typeName(T) });
+                    log.warn("Field '{s}' not used in template for {s}", .{ field_names[i], @typeName(T) });
                 }
             }
 
-            return self;
+            const tmpl = try str_buf.toOwnedSlice();
+            errdefer a.free(tmpl);
+            const markers = try marker_buf.toOwnedSlice();
+            errdefer a.free(markers);
+
+            return .{
+                .allocator = a,
+                .tmpl = tmpl,
+                .markers = markers,
+            };
         }
 
         pub fn initFromFile(a: Allocator, file: []const u8) !Self {
@@ -59,29 +88,29 @@ pub fn Template(comptime T: type) type {
         }
 
         pub fn deinit(self: Self) void {
-            self.html.deinit();
+            self.allocator.free(self.tmpl);
+            self.allocator.free(self.markers);
         }
 
         pub fn render(self: Self, data: T, writer: anytype, opts: RenderOptions) !void {
             var start: usize = 0;
-            for (self.html.markers) |m| {
-                try writer.writeAll(self.html.text[start..m.text_start]);
-                start = m.text_start;
+            for (self.markers) |marker| {
+                try writer.writeAll(self.tmpl[start..marker.text_start]);
+                start = marker.text_start;
 
-                inline for (fields) |field| {
-                    if (std.mem.eql(u8, field.name, m.name)) {
-                        try renderer.renderField(@field(data, field.name), writer, opts);
-                    }
+                inline for (field_names, 0..) |field_name, i| {
+                    if (i == marker.field_index)
+                        try renderer.renderField(@field(data, field_name), writer, opts);
                 }
             }
 
-            if (start < self.html.text.len) {
-                try writer.writeAll(self.html.text[start..]);
+            if (start < self.tmpl.len) {
+                try writer.writeAll(self.tmpl[start..]);
             }
         }
 
         pub fn renderOwned(self: Self, data: T, opts: RenderOptions) !std.ArrayList(u8) {
-            var buf = std.ArrayList(u8).init(self.html.allocator);
+            var buf = std.ArrayList(u8).init(self.allocator);
             errdefer buf.deinit();
             try self.render(data, buf.writer(), opts);
             return buf;
@@ -92,10 +121,10 @@ pub fn Template(comptime T: type) type {
 test "building template works." {
     const a = std.testing.allocator;
     const Test = struct {
-        pub fn assert(data: anytype, input_html: []const u8, expected: []const u8, opts: RenderOptions) !void {
+        pub fn assert(data: anytype, input_tmpl: []const u8, expected: []const u8, opts: RenderOptions) !void {
             const T = @TypeOf(data);
             const Templ = Template(T);
-            var tmp = try Templ.init(a, input_html);
+            var tmp = try Templ.init(a, input_tmpl);
             defer tmp.deinit();
 
             const buf = try tmp.renderOwned(data, opts);
@@ -108,6 +137,7 @@ test "building template works." {
     try Test.assert(.{ .greeting = "hello", .person = "world" }, "<html>.{greeting}, .{person}!</html>", "<html>hello, world!</html>", .{});
     try Test.assert(.{ .raw_html = "<h1>High-Class Information Below...</h1>" }, "<html>.{raw_html}</html>", "<html>&lt;h1&gt;High-Class Information Below...&lt;&#x2F;h1&gt;</html>", .{});
     try Test.assert(.{ .no_encode = "<h1>Bold!</h1>" }, "<html>.{no_encode}</html>", "<html><h1>Bold!</h1></html>", .{ .html_encode = false });
+    try Test.assert(.{ 9, 10, 21 }, ".{@\"0\"} + .{@\"1\"} = .{@\"2\"}", "9 + 10 = 21", .{}); //tuple
 }
 
 test "building template from file" {
@@ -134,38 +164,47 @@ test "building template from file" {
     try cwd.deleteFile(file_path);
 }
 
-const Tokenizer = @import("tokenizer.zig");
-const StringPool = @import("str_pool.zig");
-const DeconstructedHtml = struct {
-    const Marker = struct {
-        name: []const u8,
-        text_start: usize,
-    };
-
+const Range = @import("range.zig").Range(u8);
+const Marker = struct {
     const Self = @This();
 
     allocator: Allocator,
-    text: []const u8,
-    marker_names: []const []const u8,
-    markers: []const Marker,
+    range: Range,
+    name: []const u8,
 
-    pub fn init(a: Allocator, html: []const u8) !Self {
+    pub fn deinit(self: Self) void {
+        self.allocator.free(self.name);
+    }
+};
+
+const Tokenizer = @import("tokenizer.zig");
+const TemplateIterator = struct {
+    const Self = @This();
+
+    allocator: Allocator,
+    tokenizer: Tokenizer,
+
+    pub fn init(a: Allocator, tmpl: []const u8) Self {
+        return .{
+            .allocator = a,
+            .tokenizer = .{
+                .tmpl = tmpl,
+            },
+        };
+    }
+
+    /// Returns an owned Marker.
+    /// The marker is given the allocator this iterator was initialized with.
+    /// The marker's name will be freed when the marker is deinited.
+    pub fn next(self: *Self) Allocator.Error!?Marker {
+        const a = self.allocator;
         var token_stack = std.ArrayList(Tokenizer.Token).init(a);
         defer token_stack.deinit();
 
-        var text_buf = std.ArrayList(u8).init(a);
-        defer text_buf.deinit();
-        var str_pool = StringPool.init(a);
-        defer str_pool.deinit();
-        var markers_buf = std.ArrayList(Marker).init(a);
-        defer markers_buf.deinit();
-
-        var tokenizer = Tokenizer{ .html = html };
-        var text_start: usize = 0;
         while (true) {
-            const token = tokenizer.next();
+            const token = self.tokenizer.next();
             switch (token.tag) {
-                .eof => break,
+                .eof => return null,
                 .period => {
                     token_stack.clearRetainingCapacity();
                     try token_stack.append(token);
@@ -173,49 +212,17 @@ const DeconstructedHtml = struct {
                 else => |t| {
                     try token_stack.append(token);
                     if (t == .r_brace) {
-                        if (extractMarker(a, token_stack.items, html)) |marker_name| {
-                            const interned_name = try str_pool.intern(marker_name);
+                        if (extractMarker(a, token_stack.items, self.tokenizer.tmpl)) |marker|
+                            return marker;
 
-                            try text_buf.appendSlice(html[text_start..token_stack.items[0].range.start]);
-                            try markers_buf.append(.{ .name = interned_name, .text_start = text_buf.items.len });
-                            text_start = token.range.end;
-                        }
                         token_stack.clearRetainingCapacity();
                     }
                 },
             }
         }
-
-        try text_buf.appendSlice(html[text_start..]);
-
-        const text = try text_buf.toOwnedSlice();
-        errdefer a.free(text);
-        const marker_names = try str_pool.toOwnedSlice();
-        errdefer freeStrArr(a, marker_names);
-        const markers = try markers_buf.toOwnedSlice();
-        errdefer a.free(markers);
-
-        return .{
-            .allocator = a,
-            .text = text,
-            .marker_names = marker_names,
-            .markers = markers,
-        };
     }
 
-    pub fn deinit(self: Self) void {
-        const a = self.allocator;
-        a.free(self.text);
-        freeStrArr(a, self.marker_names);
-        a.free(self.markers);
-    }
-
-    fn freeStrArr(a: Allocator, strs: []const []const u8) void {
-        for (strs) |str| a.free(str);
-        a.free(strs);
-    }
-
-    fn extractMarker(a: Allocator, tokens: []const Tokenizer.Token, html: []const u8) ?[]const u8 {
+    fn extractMarker(a: Allocator, tokens: []const Tokenizer.Token, tmpl: []const u8) ?Marker {
         if (tokens.len < 4)
             return null;
 
@@ -223,9 +230,9 @@ const DeconstructedHtml = struct {
         if (tokens[0].tag != .period or tokens[1].tag != .l_brace or tokens[2].tag != .identifier or tokens[tokens.len - 1].tag != .r_brace)
             return null;
 
-        const ident_txt = tokens[2].range.of(html);
+        const ident_txt = tokens[2].range.of(tmpl);
 
-        return allocIdentifierName(a, ident_txt) catch |err| blk: {
+        const name = allocIdentifierName(a, ident_txt) catch |err| {
             switch (err) {
                 IdentifierNameParseError.BlankIdentifier => {
                     std.log.warn("Blank marker identifier detected in template: {s}", .{ident_txt});
@@ -236,70 +243,85 @@ const DeconstructedHtml = struct {
                 else => {},
             }
 
-            break :blk null;
+            return null;
+        };
+
+        return .{
+            .allocator = a,
+            .range = .{
+                .start = tokens[0].range.start,
+                .end = tokens[tokens.len - 1].range.end,
+            },
+            .name = name,
         };
     }
 };
 
-test "html template deconstruction" {
+test "template deconstruction" {
     const a = std.testing.allocator;
     const expectStr = std.testing.expectEqualStrings;
     const expectEq = std.testing.expectEqual;
 
     const ExpectedMarker = struct {
-        name_index: usize,
-        text_start: usize,
+        range: Range,
+        name: []const u8,
     };
 
     const Test = struct {
-        ttml: []const u8,
-
-        expected_text: []const u8,
-        expected_marker_names: []const []const u8,
+        tmpl: []const u8,
         expected_markers: []const ExpectedMarker,
 
         pub fn assert(self: @This()) !void {
-            var dec = try DeconstructedHtml.init(a, self.ttml);
-            defer dec.deinit();
-            try expectStr(self.expected_text, dec.text);
+            var extractor = TemplateIterator.init(a, self.tmpl);
+            var i: usize = 0;
+            while (try extractor.next()) |marker| {
+                defer marker.deinit();
+                const expected_marker = self.expected_markers[i];
+                try expectEq(expected_marker.range, marker.range);
+                try expectStr(expected_marker.name, marker.name);
 
-            for (self.expected_marker_names, dec.marker_names) |expected, actual| {
-                try expectStr(expected, actual);
-            }
-
-            for (self.expected_markers, dec.markers) |expected, actual| {
-                try expectEq(expected.text_start, actual.text_start);
-                try expectStr(self.expected_marker_names[expected.name_index], actual.name);
+                i += 1;
             }
         }
     };
 
     try Test.assert(.{ // markers within html
-        .ttml = "<html>.{field_nm}</html>",
-        .expected_text = "<html></html>",
-        .expected_marker_names = &[_][]const u8{"field_nm"},
-        .expected_markers = &[_]ExpectedMarker{.{ .name_index = 0, .text_start = 6 }},
+        .tmpl = "<html>.{field_nm}</html>",
+        .expected_markers = &[_]ExpectedMarker{
+            .{
+                .range = .{ .start = 6, .end = 17 },
+                .name = "field_nm",
+            },
+        },
     });
 
     try Test.assert(.{ // only markers.
-        .ttml = ".{field_nm}",
-        .expected_text = "",
-        .expected_marker_names = &[_][]const u8{"field_nm"},
-        .expected_markers = &[_]ExpectedMarker{.{ .name_index = 0, .text_start = 0 }},
+        .tmpl = ".{field_nm}",
+        .expected_markers = &[_]ExpectedMarker{
+            .{
+                .range = .{ .start = 0, .end = 11 },
+                .name = "field_nm",
+            },
+        },
     });
 
     try Test.assert(.{ // no markers.
-        .ttml = "<html></html>",
-        .expected_text = "<html></html>",
-        .expected_marker_names = &[_][]const u8{},
+        .tmpl = "<html></html>",
         .expected_markers = &[_]ExpectedMarker{},
     });
 
     try Test.assert(.{ // multiple markers.
-        .ttml = "<html>.{field_nm}</html>.{field_nm}",
-        .expected_text = "<html></html>",
-        .expected_marker_names = &[_][]const u8{"field_nm"},
-        .expected_markers = &[_]ExpectedMarker{ .{ .name_index = 0, .text_start = 6 }, .{ .name_index = 0, .text_start = 13 } },
+        .tmpl = "<html>.{field_nm}</html>.{field_nm}",
+        .expected_markers = &[_]ExpectedMarker{
+            .{
+                .range = .{ .start = 6, .end = 17 },
+                .name = "field_nm",
+            },
+            .{
+                .range = .{ .start = 24, .end = 35 },
+                .name = "field_nm",
+            },
+        },
     });
 }
 

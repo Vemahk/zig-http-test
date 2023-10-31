@@ -33,19 +33,19 @@ const State = enum(u8) {
 
 const Self = @This();
 
-html: []const u8,
+tmpl: []const u8,
 index: usize = 0,
 
 pub fn next(self: *Self) Token {
-    if (self.index >= self.html.len)
-        return .{ .tag = Tag.eof, .range = .{ .start = self.html.len, .end = self.html.len } };
+    if (self.index >= self.tmpl.len)
+        return .{ .tag = Tag.eof, .range = .{ .start = self.tmpl.len, .end = self.tmpl.len } };
 
     var state = State.start;
     var tag = Tag.other;
     const start = self.index;
 
-    while (self.index < self.html.len) : (self.index += 1) {
-        const c = self.html[self.index];
+    while (self.index < self.tmpl.len) : (self.index += 1) {
+        const c = self.tmpl[self.index];
         switch (state) {
             .end => break,
             .start => {
@@ -94,7 +94,7 @@ pub fn next(self: *Self) Token {
                 switch (c) {
                     'a'...'z', 'A'...'Z', '0'...'9', '_' => {},
                     else => {
-                        if (isKeyword(self.html[start..self.index])) {
+                        if (isKeyword(self.tmpl[start..self.index])) {
                             tag = Tag.keyword;
                         }
                         state = State.end;
@@ -145,12 +145,12 @@ test "tokenizer" {
     const expectStr = std.testing.expectEqualStrings;
 
     const Test = struct {
-        html: []const u8,
+        tmpl: []const u8,
         expectedTags: []const Tag,
         expectedStrs: []const []const u8,
 
         pub fn assert(comptime T: @This()) !void {
-            var tokenizer = Self{ .html = T.html };
+            var tokenizer = Self{ .tmpl = T.tmpl };
             var i: usize = 0;
 
             while (true) : (i += 1) {
@@ -161,79 +161,79 @@ test "tokenizer" {
                     break;
                 }
                 try expectEq(T.expectedTags[i], token.tag);
-                try expectStr(T.expectedStrs[i], token.range.of(T.html));
+                try expectStr(T.expectedStrs[i], token.range.of(T.tmpl));
             }
         }
     };
 
     try Test.assert(.{ // 1 - happy path; one tag
-        .html = "<html>.{field_nm}</html>",
+        .tmpl = "<html>.{field_nm}</html>",
         .expectedTags = &[_]Tag{ .other, .period, .l_brace, .identifier, .r_brace, .other },
         .expectedStrs = &[_][]const u8{ "<html>", ".", "{", "field_nm", "}", "</html>" },
     });
 
     try Test.assert(.{ // 2 - empty tag no identifier
-        .html = "<html>.{}</html>",
+        .tmpl = "<html>.{}</html>",
         .expectedTags = &[_]Tag{ .other, .period, .l_brace, .r_brace, .other },
         .expectedStrs = &[_][]const u8{ "<html>", ".", "{", "}", "</html>" },
     });
 
     try Test.assert(.{ // 3 - tag with reserved zig keyword
-        .html = "<html>.{fn}</html>",
+        .tmpl = "<html>.{fn}</html>",
         .expectedTags = &[_]Tag{ .other, .period, .l_brace, .keyword, .r_brace, .other },
         .expectedStrs = &[_][]const u8{ "<html>", ".", "{", "fn", "}", "</html>" },
     });
 
     try Test.assert(.{ // 4 - tag no html
-        .html = ".{field_nm}",
+        .tmpl = ".{field_nm}",
         .expectedTags = &[_]Tag{ .period, .l_brace, .identifier, .r_brace },
         .expectedStrs = &[_][]const u8{ ".", "{", "field_nm", "}" },
     });
 
     try Test.assert(.{ // 5 - tag inside quotations
-        .html = "<time datetime=\".{field_nm}\"></time>",
+        .tmpl = "<time datetime=\".{field_nm}\"></time>",
         .expectedTags = &[_]Tag{ .other, .period, .l_brace, .identifier, .r_brace, .other },
         .expectedStrs = &[_][]const u8{ "<time datetime=\"", ".", "{", "field_nm", "}", "\"></time>" },
     });
 
     try Test.assert(.{ // 6 - multiple tags
-        .html = "<html>.{field_nm}</html>.{field_nm}",
+        .tmpl = "<html>.{field_nm}</html>.{field_nm}",
         .expectedTags = &[_]Tag{ .other, .period, .l_brace, .identifier, .r_brace, .other, .period, .l_brace, .identifier, .r_brace },
         .expectedStrs = &[_][]const u8{ "<html>", ".", "{", "field_nm", "}", "</html>", ".", "{", "field_nm", "}" },
     });
 
     try Test.assert(.{ // 7 - invalid tag
-        .html = "<html>.{{field_nm}}</html>",
+        .tmpl = "<html>.{{field_nm}}</html>",
         .expectedTags = &[_]Tag{ .other, .period, .l_brace, .l_brace, .identifier, .r_brace, .r_brace, .other },
         .expectedStrs = &[_][]const u8{ "<html>", ".", "{", "{", "field_nm", "}", "}", "</html>" },
     });
 
     try Test.assert(.{ // 8 - incomplete tag
-        .html = "<html>.{field_nm</html>",
+        .tmpl = "<html>.{field_nm</html>",
         .expectedTags = &[_]Tag{ .other, .period, .l_brace, .identifier, .other },
         .expectedStrs = &[_][]const u8{ "<html>", ".", "{", "field_nm", "</html>" },
     });
 
     try Test.assert(.{ // 9 - string identifiers
-        .html = "<html>.{@\"420\"}</html>",
+        .tmpl = "<html>.{@\"420\"}</html>",
         .expectedTags = &[_]Tag{ .other, .period, .l_brace, .identifier, .r_brace, .other },
         .expectedStrs = &[_][]const u8{ "<html>", ".", "{", "@\"420\"", "}", "</html>" },
     });
 
     try Test.assert(.{ // 10 - blank identifier still gets tokenized as identifier
-        .html = "<html>.{@\"\"}</html>",
+        .tmpl = "<html>.{@\"\"}</html>",
         .expectedTags = &[_]Tag{ .other, .period, .l_brace, .identifier, .r_brace, .other },
         .expectedStrs = &[_][]const u8{ "<html>", ".", "{", "@\"\"", "}", "</html>" },
     });
 
     try Test.assert(.{ // 11 - some bastard token from hell.
-        .html = "<html>.{@\".{field_nm}\"}</html>",
+        .tmpl = "<html>.{@\".{field_nm}\"}</html>",
         .expectedTags = &[_]Tag{ .other, .period, .l_brace, .identifier, .r_brace, .other },
         .expectedStrs = &[_][]const u8{ "<html>", ".", "{", "@\".{field_nm}\"", "}", "</html>" },
     });
 
     try Test.assert(.{ // 12 - eol terminates identifier
-        .html =
+        .tmpl =
         \\.{field
         \\}
         ,
@@ -242,7 +242,7 @@ test "tokenizer" {
     });
 
     try Test.assert(.{ // 13 - eol invalidates literal identifier
-        .html =
+        .tmpl =
         \\.{@"field
         \\
         ,
