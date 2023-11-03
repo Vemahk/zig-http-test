@@ -2,8 +2,11 @@ pub const Layout = init(struct { title: []const u8, content: []const u8 }, "priv
 pub const Time = init(struct { timestamp: i64 }, "private/templates/time.html", .{});
 
 const std = @import("std");
+const log = std.log.scoped(.templates);
+
 const builtin = @import("builtin");
-const Template = @import("template").Template;
+const TemplateNS = @import("template");
+const Template = TemplateNS.Template;
 const TemplaterOptions = struct {
     embed_html: bool = false,
 };
@@ -15,7 +18,7 @@ fn init(comptime T: type, comptime file_path: []const u8, comptime opts: Templat
         var tmpl: ?Template(T) = null;
         var load_time: i128 = 0;
         pub fn get(allocator: std.mem.Allocator) !*const Template(T) {
-            if (try should_rebuild())
+            if (should_rebuild())
                 try rebuild(allocator);
 
             return &tmpl.?;
@@ -23,12 +26,14 @@ fn init(comptime T: type, comptime file_path: []const u8, comptime opts: Templat
 
         var lock: std.Thread.Mutex = .{};
         pub fn rebuild(allocator: std.mem.Allocator) !void {
+            const timestamp = std.time.microTimestamp;
+            const start = timestamp();
             lock.lock();
             defer lock.unlock();
             if (tmpl) |t| t.deinit();
             tmpl = try create(allocator);
             load_time = std.time.nanoTimestamp();
-            std.debug.print("(re)Built template of {s}", .{file_path});
+            log.debug("(re)Built template of {s} ({d}us)", .{ file_path, timestamp() - start });
         }
 
         fn create(allocator: std.mem.Allocator) !Template(T) {
@@ -36,20 +41,22 @@ fn init(comptime T: type, comptime file_path: []const u8, comptime opts: Templat
                 Template(T).init(allocator, @embedFile(file_path))
             else
                 Template(T).initFromFile(allocator, file_path)) catch |err| {
-                std.log.err("Failed to generate Template from {s}\n", .{file_path});
+                log.err("Failed to generate Template from {s}\n", .{file_path});
                 return err;
             };
         }
 
-        inline fn should_rebuild() !bool {
-            if (tmpl == null)
+        fn should_rebuild() bool {
+            if (tmpl == null) {
                 return true;
+            }
 
-            if (builtin.mode != .Debug)
-                return false;
+            if (builtin.mode == .Debug) {
+                const stat = std.fs.cwd().statFile(file_path) catch return false;
+                return stat.mtime > load_time;
+            }
 
-            const stat = try std.fs.cwd().statFile(file_path);
-            return stat.mtime > load_time;
+            return false;
         }
     };
 }

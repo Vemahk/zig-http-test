@@ -33,8 +33,8 @@ pub fn Template(comptime T: type) type {
                 defer marker.deinit();
 
                 const index: ?usize = blk: {
-                    inline for (field_names, 0..) |field, i| {
-                        if (std.mem.eql(u8, field, marker.name))
+                    inline for (field_names, 0..) |field_name, i| {
+                        if (std.mem.eql(u8, field_name, marker.name))
                             break :blk i;
                     }
 
@@ -79,9 +79,7 @@ pub fn Template(comptime T: type) type {
 
         pub fn initFromFile(a: Allocator, file: []const u8) !Self {
             const max_size = 1 << 24; // 16MB, why not.
-            var f: std.fs.File = try std.fs.cwd().openFile(file, .{});
-            defer f.close();
-            const file_text = try f.readToEndAlloc(a, max_size);
+            const file_text = try std.fs.cwd().readFileAlloc(a, file, max_size);
             defer a.free(file_text);
 
             return try init(a, file_text);
@@ -92,15 +90,27 @@ pub fn Template(comptime T: type) type {
             self.allocator.free(self.markers);
         }
 
-        pub fn render(self: Self, data: T, writer: anytype, opts: RenderOptions) !void {
+        pub fn render(self: Self, data: T, writer: anytype, opts: anytype) !void {
+            comptime {
+                const TOpt = @TypeOf(opts);
+                const info: std.builtin.Type = @typeInfo(TOpt);
+                const fields: []const std.builtin.Type.StructField = info.Struct.fields;
+                for (fields) |field| {
+                    if (!@hasField(T, field.name))
+                        @compileError("'" ++ field.name ++ "' is not defined in the data struct of this template.");
+                }
+            }
+
             var start: usize = 0;
             for (self.markers) |marker| {
                 try writer.writeAll(self.tmpl[start..marker.text_start]);
                 start = marker.text_start;
 
                 inline for (field_names, 0..) |field_name, i| {
-                    if (i == marker.field_index)
-                        try renderer.renderField(@field(data, field_name), writer, opts);
+                    if (i == marker.field_index) {
+                        const o: RenderOptions = if (@hasField(@TypeOf(opts), field_name)) @field(opts, field_name) else .{};
+                        try renderer.renderField(@field(data, field_name), writer, o);
+                    }
                 }
             }
 
@@ -109,7 +119,7 @@ pub fn Template(comptime T: type) type {
             }
         }
 
-        pub fn renderOwned(self: Self, data: T, opts: RenderOptions) !std.ArrayList(u8) {
+        pub fn renderOwned(self: Self, data: T, opts: anytype) !std.ArrayList(u8) {
             var buf = std.ArrayList(u8).init(self.allocator);
             errdefer buf.deinit();
             try self.render(data, buf.writer(), opts);
@@ -121,23 +131,34 @@ pub fn Template(comptime T: type) type {
 test "building template works." {
     const a = std.testing.allocator;
     const Test = struct {
-        pub fn assert(data: anytype, input_tmpl: []const u8, expected: []const u8, opts: RenderOptions) !void {
+        const Self = @This();
+
+        input_tmpl: []const u8,
+        expected: []const u8,
+
+        pub fn assert(data: anytype, tmpl: []const u8, expected_out: []const u8) !void {
+            return try assertOpts(data, tmpl, expected_out, .{});
+        }
+
+        pub fn assertOpts(data: anytype, tmpl: []const u8, expected_out: []const u8, opts: anytype) !void {
             const T = @TypeOf(data);
             const Templ = Template(T);
-            var tmp = try Templ.init(a, input_tmpl);
+            var tmp = try Templ.init(a, tmpl);
             defer tmp.deinit();
 
             const buf = try tmp.renderOwned(data, opts);
             defer buf.deinit();
-            try std.testing.expectEqualStrings(expected, buf.items);
+            try std.testing.expectEqualStrings(expected_out, buf.items);
         }
     };
 
-    try Test.assert(.{ .val = 50 }, "<h1>.{val}</h1>", "<h1>50</h1>", .{});
-    try Test.assert(.{ .greeting = "hello", .person = "world" }, "<html>.{greeting}, .{person}!</html>", "<html>hello, world!</html>", .{});
-    try Test.assert(.{ .raw_html = "<h1>High-Class Information Below...</h1>" }, "<html>.{raw_html}</html>", "<html>&lt;h1&gt;High-Class Information Below...&lt;&#x2F;h1&gt;</html>", .{});
-    try Test.assert(.{ .no_encode = "<h1>Bold!</h1>" }, "<html>.{no_encode}</html>", "<html><h1>Bold!</h1></html>", .{ .html_encode = false });
-    try Test.assert(.{ 9, 10, 21 }, ".{@\"0\"} + .{@\"1\"} = .{@\"2\"}", "9 + 10 = 21", .{}); //tuple
+    try Test.assert(.{ .val = 50 }, "<h1>.{val}</h1>", "<h1>50</h1>");
+    try Test.assert(.{ .greeting = "hello", .person = "world" }, "<html>.{greeting}, .{person}!</html>", "<html>hello, world!</html>");
+    try Test.assert(.{ .raw_html = "<h1>High-Class Information Below...</h1>" }, "<html>.{raw_html}</html>", "<html>&lt;h1&gt;High-Class Information Below...&lt;&#x2F;h1&gt;</html>");
+    try Test.assert(.{ 9, 10, 21 }, ".{@\"0\"} + .{@\"1\"} = .{@\"2\"}", "9 + 10 = 21"); //tuple
+
+    const no_encode_plz: RenderOptions = .{ .html_encode = false };
+    try Test.assertOpts(.{ .no_encode = "<h1>Bold!</h1>" }, "<html>.{no_encode}</html>", "<html><h1>Bold!</h1></html>", .{ .no_encode = no_encode_plz });
 }
 
 test "building template from file" {

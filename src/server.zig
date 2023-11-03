@@ -55,10 +55,11 @@ fn notFound(req: zap.SimpleRequest) void {
 
     const Layout = @import("root").Templates.Layout;
     const data = Layout.Data{ .title = "Not Found!", .content = "<h1>The requested content could not be found.</h1>" };
+    const opts = .{ .content = .{ .html_encode = false } };
 
     var a = alloc();
     const tmpl = Layout.get(a) catch return;
-    const buf = tmpl.renderOwned(data, .{ .html_encode = false }) catch return;
+    const buf = tmpl.renderOwned(data, opts) catch return;
     defer buf.deinit();
 
     req.sendBody(buf.items) catch return;
