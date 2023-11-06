@@ -7,7 +7,11 @@
         .zap = .{
             .url = "https://github.com/zigzap/zap/archive/refs/tags/v0.1.14-pre.tar.gz",
             .hash = "122067d12bc7abb93f7ce623f61b94cadfdb180cef12da6559d092e6b374202acda3",
-        }
+        },
+        .mustache = .{
+            .url = "https://github.com/batiati/mustache-zig/archive/bb01f187544d0e6efae768eff4f3629a993c8332.tar.gz",
+            .hash = "1220fdf239b6ece687324bb600c72d5ad7a278df2ece86599aee6adf932064686cef",
+        },
     },
     .paths = .{""},
 }

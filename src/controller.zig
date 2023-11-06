@@ -4,7 +4,9 @@ const Allocator = std.mem.Allocator;
 const zap = @import("zap");
 pub const Request = zap.SimpleRequest;
 
-const Template = @import("template").Template;
+const Templater = @import("templates.zig").Templater;
+
+const mustache = @import("mustache");
 const HttpMethod = @import("http.zig").HttpMethod;
 
 pub const RequestFn = *const fn (self: Controller, r: Request) anyerror!void;
@@ -28,10 +30,9 @@ pub const Controller = struct {
         }
     }
 
-    pub fn renderBody(self: Self, r: Request, Tmpl: anytype, data: anytype, opts: anytype) !void {
-        const T = @TypeOf(data);
-        const tmpl: *const Template(T) = try Tmpl.get(self.allocator);
-        const buf = try tmpl.renderOwned(data, opts);
+    pub fn renderBody(self: Self, r: Request, templater: Templater, data: templater.Data) !void {
+        const tmpl = templater.get(self.allocator);
+        const buf = try mustache.allocRender(self.allocator, tmpl, data);
         defer buf.deinit();
         try r.setContentType(.HTML);
         try r.sendBody(buf.items);
