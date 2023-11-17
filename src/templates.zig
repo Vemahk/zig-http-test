@@ -7,8 +7,8 @@ pub const Templater = struct {
     get: *const fn (allocator: Allocator) Template,
 };
 
-pub const Layout = init(struct { title: []const u8, content: []const u8 }, .{ .file_path = "private/templates/layout.html" });
-pub const Time = init(struct { timestamp: i64 }, .{ .file_path = "private/templates/time.html" });
+pub const Layout = init(struct { title: []const u8, content: []const u8 }, .{ .file_path = "layout.html" });
+pub const Time = init(struct { timestamp: i64 }, .{ .file_path = "time.html" });
 
 const mustache = @import("mustache");
 const Template = mustache.Template;
@@ -21,17 +21,20 @@ const Options = struct {
     embed: bool = !is_debug,
 };
 
+const root_path = "resources/private/templates/";
+
 fn init(comptime T: type, comptime opts: Options) Templater {
-    const file_path = opts.file_path;
     return Templater{
         .Data = T,
         .get = if (opts.embed) struct {
-            const template = mustache.parseComptime(embedResource(file_path), .{}, .{});
+            const file_path = "../" ++ root_path ++ opts.file_path;
+            const template = mustache.parseComptime(@embedFile(file_path), .{}, .{});
             pub fn get(allocator: Allocator) Template {
                 _ = allocator;
                 return template;
             }
         }.get else struct {
+            const file_path = root_path ++ opts.file_path;
             var tmpl: ?Template = null;
             pub fn get(allocator: Allocator) Template {
                 if (should_rebuild())
@@ -55,10 +58,18 @@ fn init(comptime T: type, comptime opts: Options) Templater {
             }
 
             fn create(allocator: Allocator) !Template {
-                const template_text = try std.fs.cwd().readFileAlloc(allocator, file_path, 1 << 20);
-                const template = try mustache.parseText(allocator, template_text, .{}, .{ .copy_strings = false });
-                log.debug("(re)Built template of {s}\n", .{file_path});
-                return template;
+                const absolute_path = try std.fs.cwd().realpathAlloc(allocator, file_path);
+                const template = try mustache.parseFile(allocator, absolute_path, .{}, .{});
+                switch (template) {
+                    .success => |t| {
+                        log.debug("(re)Built template of {s}\n", .{file_path});
+                        return t;
+                    },
+                    .parse_error => |e| {
+                        log.warn("Failed to build template of {s}: ({d},{d})\n", .{ file_path, e.lin, e.col });
+                        return e.parse_error;
+                    },
+                }
             }
 
             fn should_rebuild() bool {
@@ -74,8 +85,4 @@ fn init(comptime T: type, comptime opts: Options) Templater {
             }
         }.get,
     };
-}
-
-fn embedResource(comptime file_path: []const u8) []const u8 {
-    return @embedFile(file_path);
 }
