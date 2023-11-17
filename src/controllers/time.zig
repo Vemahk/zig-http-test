@@ -9,5 +9,5 @@ pub const endpoint = C.Endpoint{
 fn get(c: C.Controller, r: C.Request) !void {
     const Layout = @import("root").Templates.Time;
     const data = Layout.Data{ .timestamp = std.time.timestamp() };
-    try c.renderBody(r, Layout, data, .{});
+    try c.renderBody(r, Layout, data);
 }

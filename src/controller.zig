@@ -4,7 +4,7 @@ const Allocator = std.mem.Allocator;
 const zap = @import("zap");
 pub const Request = zap.SimpleRequest;
 
-const Templater = @import("templates.zig").Templater;
+const Templater = @import("root").Templates.Templater;
 
 const mustache = @import("mustache");
 const HttpMethod = @import("http.zig").HttpMethod;
@@ -30,12 +30,12 @@ pub const Controller = struct {
         }
     }
 
-    pub fn renderBody(self: Self, r: Request, templater: Templater, data: templater.Data) !void {
+    pub fn renderBody(self: Self, r: Request, comptime templater: Templater, data: templater.Data) !void {
         const tmpl = templater.get(self.allocator);
         const buf = try mustache.allocRender(self.allocator, tmpl, data);
-        defer buf.deinit();
+        defer self.allocator.free(buf);
         try r.setContentType(.HTML);
-        try r.sendBody(buf.items);
+        try r.sendBody(buf);
     }
 };
 

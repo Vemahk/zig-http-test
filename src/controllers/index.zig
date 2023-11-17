@@ -12,7 +12,5 @@ fn get(c: C.Controller, r: C.Request) !void {
 
     const Layout = root.Templates.Layout;
     const data = Layout.Data{ .title = "Finally!", .content = content };
-    const opts = .{ .content = .{ .html_encode = false } };
-
-    try c.renderBody(r, Layout, data, opts);
+    try c.renderBody(r, Layout, data);
 }

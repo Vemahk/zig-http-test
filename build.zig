@@ -26,14 +26,6 @@ pub fn build(b: *std.Build) void {
     exe.addModule("zap", zap.module("zap"));
     exe.linkLibrary(zap.artifact("facil.io"));
 
-    const tmpl_mod = b.addModule("templates", .{
-        .source_file = .{ .path = "lib/templates/src/templates.zig" },
-        .dependencies = &.{
-            .{ .name = "mustache", .module = mustache_mod },
-        },
-    });
-    exe.addModule("templates", tmpl_mod);
-
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
 

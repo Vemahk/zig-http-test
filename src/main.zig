@@ -43,18 +43,17 @@ fn run(self: Server) !void {
     try Listener.init(alloc(), notFound);
     defer Listener.deinit();
 
-    const ctrls = @import("root").Controllers;
-    const info: std.builtin.Type = @typeInfo(ctrls);
+    const info: std.builtin.Type = @typeInfo(Controllers);
     const decls = info.Struct.decls;
     inline for (decls) |decl| {
-        try Listener.add(@field(ctrls, decl.name).endpoint);
+        try Listener.add(@field(Controllers, decl.name).endpoint);
     }
 
     try Listener.listen(.{
         .port = port,
         .on_request = null, // required here, but overriden by Listener.
         .log = true,
-        .public_folder = "wwwroot",
+        .public_folder = "resources/public",
     });
 
     zap.start(.{
@@ -66,13 +65,13 @@ fn run(self: Server) !void {
 fn notFound(req: zap.SimpleRequest) void {
     req.setStatus(zap.StatusCode.not_found);
 
-    const Layout = @import("root").Templates.Layout;
+    const Layout = Templates.Layout;
     const data = Layout.Data{ .title = "Not Found!", .content = "<h1>The requested content could not be found.</h1>" };
 
     var a = alloc();
     const tmpl = Layout.get(a);
     const buf = @import("mustache").allocRender(a, tmpl, data) catch return;
-    defer buf.deinit();
+    defer a.free(buf);
 
-    req.sendBody(buf.items) catch return;
+    req.sendBody(buf) catch return;
 }

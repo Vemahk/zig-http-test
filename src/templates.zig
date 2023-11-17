@@ -56,7 +56,7 @@ fn init(comptime T: type, comptime opts: Options) Templater {
 
             fn create(allocator: Allocator) !Template {
                 const template_text = try std.fs.cwd().readFileAlloc(allocator, file_path, 1 << 20);
-                const template = try mustache.parseText(allocator, template_text, .{}, .{});
+                const template = try mustache.parseText(allocator, template_text, .{}, .{ .copy_strings = false });
                 log.debug("(re)Built template of {s}\n", .{file_path});
                 return template;
             }
