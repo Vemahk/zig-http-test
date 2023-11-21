@@ -5,7 +5,6 @@ const zap = @import("zap");
 pub const Request = zap.SimpleRequest;
 
 const mustache = @import("mustache");
-const HttpMethod = @import("http.zig").HttpMethod;
 const ResourceId = @import("path.zig").ResourceId;
 const Templater = @import("root").Templates.Templater;
 
@@ -43,26 +42,21 @@ pub const Endpoint = struct {
     patch: ?RequestFn = null,
 
     pub fn onRequest(self: Self, ctx: HttpContext) void {
-        const r = ctx.request;
-        if (HttpMethod.fromStr(r.method)) |m| {
-            if (self.methodHandler(m)) |f| {
-                return f(ctx) catch ctx.exit(.internal_server_error);
-            } else {
-                return ctx.exit(.method_not_allowed);
-            }
-        } else {
-            std.log.warn("unknown method: {?s}\n", .{r.method});
-            return ctx.exit(.bad_request);
+        if (ctx.request.method) |method| {
+            if (self.methodHandler(method)) |func| {
+                return func(ctx) catch ctx.exit(.internal_server_error);
+            } else std.log.warn("unknown method: {?s}\n", .{method});
         }
+
+        return ctx.exit(.method_not_allowed);
     }
 
-    inline fn methodHandler(self: Self, method: HttpMethod) ?RequestFn {
-        return switch (method) {
-            .Get => self.get,
-            .Post => self.post,
-            .Put => self.put,
-            .Delete => self.delete,
-            .Patch => self.patch,
-        };
+    fn methodHandler(self: Self, method: []const u8) ?RequestFn {
+        if (std.mem.eql(u8, method, "GET")) return self.get;
+        if (std.mem.eql(u8, method, "POST")) return self.post;
+        if (std.mem.eql(u8, method, "PUT")) return self.put;
+        if (std.mem.eql(u8, method, "DELETE")) return self.delete;
+        if (std.mem.eql(u8, method, "PATCH")) return self.patch;
+        return null;
     }
 };
