@@ -9,11 +9,10 @@ const Err = zap.EndpointListenerError;
 const Request = zap.SimpleRequest;
 const RequestFn = zap.SimpleHttpRequestFn;
 
-const Controllers = @import("controller.zig");
-const Controller = Controllers.Controller;
-const Endpoint = Controllers.Endpoint;
+const E = @import("endpoint.zig");
+const Endpoint = E.Endpoint;
 
-const Router = @import("path-trie.zig").Trie(Controller);
+const Router = @import("path.zig").Paths(Endpoint);
 
 //Singleton? I hardly know 'er!
 var has_init: AtomicBool = AtomicBool.init(false);
@@ -36,10 +35,7 @@ pub fn deinit() void {
 }
 
 pub fn add(comptime endpoint: Endpoint) !void {
-    try router.add(endpoint.path, Controller{
-        .allocator = allocator,
-        .endpoint = endpoint,
-    });
+    try router.add(endpoint.path, endpoint);
 }
 
 var listener: Listener = undefined;
@@ -53,8 +49,14 @@ pub fn listen(l: ListenerSettings) !void {
 
 fn route(r: Request) void {
     if (r.path) |p| {
-        if (router.get(p) catch null) |c|
-            return c.onRequest(r);
+        if (router.find(p) catch null) |c| {
+            const ctx = E.HttpContext{
+                .request = r,
+                .allocator = allocator,
+                .id = c[1],
+            };
+            return c[0].onRequest(ctx);
+        }
     }
 
     return not_found_handler(r);

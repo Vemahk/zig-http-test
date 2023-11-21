@@ -8,12 +8,12 @@ pub fn main() !void {
     try instance.run();
 }
 
-pub const Controllers = @import("controllers.zig");
+pub const Endpoints = @import("endpoints.zig");
 pub const Templates = @import("templates.zig");
 
 test {
-    _ = Controllers;
     _ = Templates;
+    _ = @import("path.zig");
 }
 
 var gpa = std.heap.GeneralPurposeAllocator(.{
@@ -43,10 +43,10 @@ fn run(self: Server) !void {
     try Listener.init(alloc(), notFound);
     defer Listener.deinit();
 
-    const info: std.builtin.Type = @typeInfo(Controllers);
+    const info: std.builtin.Type = @typeInfo(Endpoints);
     const decls = info.Struct.decls;
     inline for (decls) |decl| {
-        try Listener.add(@field(Controllers, decl.name).endpoint);
+        try Listener.add(@field(Endpoints, decl.name));
     }
 
     try Listener.listen(.{

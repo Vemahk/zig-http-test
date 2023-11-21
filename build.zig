@@ -1,12 +1,13 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
+    const root_source_file = std.Build.LazyPath{ .path = "src/main.zig" };
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
     const exe = b.addExecutable(.{
         .name = "http-test",
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = root_source_file,
         .target = target,
         .optimize = optimize,
     });
@@ -38,7 +39,7 @@ pub fn build(b: *std.Build) void {
 
     //Tests
     const unit_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = root_source_file,
         .target = target,
         .optimize = optimize,
     });

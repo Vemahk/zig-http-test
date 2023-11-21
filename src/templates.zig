@@ -27,7 +27,7 @@ fn init(comptime T: type, comptime opts: Options) Templater {
     return Templater{
         .Data = T,
         .get = if (opts.embed) struct {
-            const file_path = "../" ++ root_path ++ opts.file_path;
+            const file_path = "../" ++ root_path ++ opts.file_path; // TODO this doesn't actually work :(
             const template = mustache.parseComptime(@embedFile(file_path), .{}, .{});
             pub fn get(allocator: Allocator) Template {
                 _ = allocator;

@@ -6,7 +6,11 @@ pub const PathErr = error{
 const Self = @This();
 
 path: []const u8,
-i: usize = 0,
+i: usize,
+
+pub fn init(path: []const u8) Self {
+    return .{ .path = path, .i = 0 };
+}
 
 pub fn next(self: *Self) PathErr!?[]const u8 {
     const start = self.i;
@@ -31,7 +35,7 @@ pub fn next(self: *Self) PathErr!?[]const u8 {
 
 test "valid path parses" {
     const path = "/foo/bar/baz";
-    var iter = Self{ .path = path };
+    var iter = Self.init(path);
 
     const testing = @import("std").testing;
     const expectEq = testing.expectEqualStrings;
@@ -45,7 +49,7 @@ test "valid path parses" {
 
 test "then trailing slash is ignored" {
     const path = "/";
-    var iter = Self{ .path = path };
+    var iter = Self.init(path);
 
     const testing = @import("std").testing;
     const expectEq = testing.expectEqualStrings;
@@ -54,25 +58,25 @@ test "then trailing slash is ignored" {
     try expect(try iter.next() == null);
 
     const path2 = "/foo/";
-    iter = Self{ .path = path2 };
+    iter = Self.init(path2);
     try expectEq("foo", try iter.next() orelse unreachable);
     try expect(try iter.next() == null);
 }
 
 test "then double slash causes error" {
     const path = "//";
-    var iter = Self{ .path = path };
+    var iter = Self.init(path);
 
     const testing = @import("std").testing;
-    const expect = testing.expect;
-    try expect(iter.next() == PathErr.EmptyPath);
+    const expectError = testing.expectError;
+    try expectError(PathErr.EmptyPath, iter.next());
 }
 
 test "then non-path errors" {
     const path = "foo";
-    var iter = Self{ .path = path };
+    var iter = Self.init(path);
 
     const testing = @import("std").testing;
-    const expect = testing.expect;
-    try expect(iter.next() == PathErr.BadPath);
+    const expectError = testing.expectError;
+    try expectError(PathErr.BadPath, iter.next());
 }
