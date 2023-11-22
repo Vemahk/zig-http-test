@@ -1,3 +1,6 @@
+pub const Layout = init(struct { title: []const u8, content: []const u8 }, .{ .file_path = "layout.html" });
+pub const Time = init(struct { timestamp: i64 }, .{ .file_path = "time.html" });
+
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const log = std.log.scoped(.templates);
@@ -6,9 +9,6 @@ pub const Templater = struct {
     Data: type,
     get: *const fn (allocator: Allocator) Template,
 };
-
-pub const Layout = init(struct { title: []const u8, content: []const u8 }, .{ .file_path = "layout.html" });
-pub const Time = init(struct { timestamp: i64 }, .{ .file_path = "time.html" });
 
 const mustache = @import("mustache");
 const Template = mustache.Template;
@@ -29,8 +29,7 @@ fn init(comptime T: type, comptime opts: Options) Templater {
         .get = if (opts.embed) struct {
             const file_path = "../" ++ root_path ++ opts.file_path; // TODO this doesn't actually work :(
             const template = mustache.parseComptime(@embedFile(file_path), .{}, .{});
-            pub fn get(allocator: Allocator) Template {
-                _ = allocator;
+            pub fn get(_: Allocator) Template {
                 return template;
             }
         }.get else struct {

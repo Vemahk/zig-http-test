@@ -9,8 +9,7 @@ const Err = zap.EndpointListenerError;
 const Request = zap.SimpleRequest;
 const RequestFn = zap.SimpleHttpRequestFn;
 
-const E = @import("endpoint.zig");
-const Endpoint = E.Endpoint;
+const Endpoint = @import("endpoint.zig");
 
 const Router = @import("path.zig").Paths(Endpoint);
 
@@ -50,7 +49,7 @@ pub fn listen(l: ListenerSettings) !void {
 fn route(r: Request) void {
     if (r.path) |p| {
         if (router.find(p) catch null) |c| {
-            const ctx = E.HttpContext{
+            const ctx = Endpoint.Context{
                 .request = r,
                 .allocator = allocator,
                 .id = c[1],
