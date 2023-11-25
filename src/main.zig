@@ -45,7 +45,7 @@ fn run() !void {
         .port = port,
         .on_request = null, // required here, but overriden by Listener.
         .log = true,
-        .public_folder = "resources/public",
+        .public_folder = "share/static",
     });
 
     zap.start(.{

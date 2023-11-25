@@ -21,7 +21,7 @@ const Options = struct {
     embed: bool = !is_debug,
 };
 
-const root_path = "resources/private/templates/";
+const root_path = "share/views/";
 
 fn init(comptime T: type, comptime opts: Options) Templater {
     return Templater{
