@@ -13,6 +13,7 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(exe);
 
+    // Add dependencies
     const mustache = b.dependency("mustache", .{
         .target = target,
         .optimize = optimize,
@@ -27,6 +28,14 @@ pub fn build(b: *std.Build) void {
     exe.addModule("zap", zap.module("zap"));
     exe.linkLibrary(zap.artifact("facil.io"));
 
+    // Copy `share/` dir.
+    b.installDirectory(.{
+        .source_dir = std.Build.LazyPath{ .path = "share" },
+        .install_dir = .{ .prefix = {} },
+        .install_subdir = "share",
+    });
+
+    // Define run command.
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
 
