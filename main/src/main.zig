@@ -10,7 +10,13 @@ pub fn main() !void {
         const has_leaked = gpa.detectLeaks();
         if (has_leaked) std.debug.print("Memory leaks detected!\n", .{});
     }
+
     alloc = gpa.allocator();
+
+    const cwd = try std.fs.cwd().realpathAlloc(alloc, ".");
+    defer alloc.free(cwd);
+    std.debug.print("cwd: {s}\n", .{cwd});
+
     try run();
 }
 

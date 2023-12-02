@@ -1,7 +1,9 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
-    const root_source_file = std.Build.LazyPath{ .path = "src/main.zig" };
+    const main_path = std.Build.LazyPath{ .path = "main" };
+
+    const root_source_file = std.Build.LazyPath{ .path = main_path.path ++ "/src/main.zig" };
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
@@ -10,6 +12,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = root_source_file,
         .target = target,
         .optimize = optimize,
+        .main_pkg_path = main_path,
     });
     b.installArtifact(exe);
 
@@ -18,8 +21,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    const mustache_mod = mustache.module("mustache");
-    exe.addModule("mustache", mustache_mod);
+    exe.addModule("mustache", mustache.module("mustache"));
 
     const zap = b.dependency("zap", .{
         .target = target,
@@ -30,12 +32,12 @@ pub fn build(b: *std.Build) void {
 
     // Copy `share/` dir.
     b.installDirectory(.{
-        .source_dir = std.Build.LazyPath{ .path = "share" },
+        .source_dir = std.Build.LazyPath{ .path = main_path.path ++ "/share" },
         .install_dir = .{ .prefix = {} },
         .install_subdir = "share",
     });
 
-    // Define run command.
+    // Define `run` command.
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
 
