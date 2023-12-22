@@ -47,6 +47,7 @@ pub fn build(b: *std.Build) void {
 
     // Define `run` command.
     const run_cmd = b.addRunArtifact(exe);
+    run_cmd.cwd = b.install_prefix;
     run_cmd.step.dependOn(b.getInstallStep());
 
     if (b.args) |args| {
