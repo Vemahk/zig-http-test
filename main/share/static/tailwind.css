@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    h1, h2, h3, h4, h5, h6 {
+        @apply font-bold;
+    }
+    h1 {
+        @apply text-3xl my-2;
+    }
+    h2 {
+        @apply text-2xl my-1.5;
+    }
+    a {
+        @apply text-blue-400 visited:text-purple-500 underline dark:font-bold;
+    }
+
+    footer {
+        @apply sticky;
+    }
+}

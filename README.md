@@ -24,6 +24,8 @@ So far, it's been a very positive experience.
 
 I've noticed that if an error occurs behind a duck type (`anytype`), the stack trace is sometimes destroyed, and it's not possible to tell where an error is occuring.  Judging Zig for that it does not have interfaces and relies heavily on duck-typing for polymorphism, this is a huge pain point for working with Zig.
 
+I've also tried and failed to use the built in http client to pull requests from https.  The error was very strange and I wasn't able to work through it with the limited amount of time I allocated to it.
+
 ## In Zap
 
 None, really.  Very smooth.

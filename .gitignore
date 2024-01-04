@@ -1,5 +1,8 @@
-.build/
+.build/**
+!.build/tailwind.config.js
+
 zig-cache/
 zig-out/
-
 test.txt
+
+
