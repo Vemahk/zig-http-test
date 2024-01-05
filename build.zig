@@ -15,7 +15,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .main_pkg_path = main_path,
     });
-    b.installArtifact(exe);
 
     // Add dependencies
     const mustache = b.dependency("mustache", .{
@@ -27,9 +26,11 @@ pub fn build(b: *std.Build) void {
     const zap = b.dependency("zap", .{
         .target = target,
         .optimize = optimize,
+        //.openssl = true,
     });
     exe.addModule("zap", zap.module("zap"));
     exe.linkLibrary(zap.artifact("facil.io"));
+    b.installArtifact(exe);
 
     // Copy `share/` dir.
     var share_dir = b.addInstallDirectory(.{

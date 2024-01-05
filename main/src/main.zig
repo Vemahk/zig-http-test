@@ -47,11 +47,19 @@ fn run() !void {
         });
     }
 
+    // TLS D:
+    //const tls = try zap.Tls.init(.{
+    //    .public_certificate_file = "~/.local/certs/vemahk.me.crt",
+    //    .private_key_file = "~/.local/certs/vemahk.me.key",
+    //});
+    //defer tls.deinit();
+
     try Listener.listen(.{
         .port = port,
         .on_request = null, // required here, but overriden by Listener.
         .log = true,
         .public_folder = "share/static",
+        //.tls = tls,
     });
 
     zap.start(.{
