@@ -22,7 +22,6 @@ pub fn Paths(comptime T: type) type {
     return struct {
         const Self = @This();
         const KV = struct { path: []const u8, value: T };
-        pub const Result = struct { T, ResourceId };
 
         paths: std.ArrayList(KV),
 
@@ -43,7 +42,7 @@ pub fn Paths(comptime T: type) type {
             try self.paths.append(.{ .path = path, .value = value });
         }
 
-        pub fn find(self: Self, path: []const u8) !?Result {
+        pub fn find(self: Self, path: []const u8) !?struct { T, ResourceId } {
             for (self.paths.items) |kv| {
                 if (try matches(path, kv.path)) |resource_id| {
                     return .{ kv.value, resource_id };
