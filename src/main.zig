@@ -49,8 +49,8 @@ fn run() !void {
 
     // TLS D:
     const tls = try zap.Tls.init(.{
-        .public_certificate_file = "~/.local/certs/vemahk.me.crt",
-        .private_key_file = "~/.local/certs/vemahk.me.key",
+        .public_certificate_file = "vemahk.me.crt",
+        .private_key_file = "vemahk.me.key",
     });
     defer tls.deinit();
 
