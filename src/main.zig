@@ -1,5 +1,6 @@
-pub const Endpoints = @import("endpoints.zig");
-pub const Templates = @import("templates.zig");
+pub const Endpoints = @import("endpoints/_list.zig");
+pub const Templates = @import("server/templates.zig");
+pub const Endpoint = @import("server/endpoint.zig");
 
 const std = @import("std");
 
@@ -23,7 +24,7 @@ pub fn main() !void {
 const zap = @import("zap");
 
 fn run() !void {
-    const Listener = @import("listener.zig");
+    const Listener = @import("server/listener.zig");
 
     const port = 3000;
 
@@ -32,7 +33,6 @@ fn run() !void {
     defer Listener.deinit();
 
     // Register all our endpoints.
-    const Endpoint = @import("endpoint.zig");
     const info: std.builtin.Type = @typeInfo(Endpoints);
     const decls = info.Struct.decls;
     inline for (decls) |decl| {

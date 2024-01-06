@@ -2,9 +2,9 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 pub fn build(b: *std.Build) void {
-    const main_path = std.Build.LazyPath{ .path = "main" };
+    const main_path = std.Build.LazyPath{ .path = "src" };
 
-    const root_source_file = std.Build.LazyPath{ .path = main_path.path ++ "/src/main.zig" };
+    const root_source_file = std.Build.LazyPath{ .path = main_path.path ++ "/main.zig" };
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .ReleaseSafe });
 
@@ -46,7 +46,7 @@ pub fn build(b: *std.Build) void {
         "-c",
         ".build/tailwind.config.js",
         "-i",
-        "./main/share/static/tailwind.css",
+        "./src/share/static/tailwind.css",
         "-o",
         "./zig-out/share/static/tailwind.css",
     });
