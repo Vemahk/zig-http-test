@@ -33,8 +33,54 @@ pub fn deinit() void {
     router.deinit();
 }
 
-pub fn add(comptime endpoint: Endpoint) !void {
-    try router.add(endpoint.path, endpoint);
+pub fn add(path: []const u8, endpoint: Endpoint) !void {
+    try router.add(path, endpoint);
+}
+
+pub fn buildStaticFileRoutes(comptime public_folder: []const u8) !void {
+    const getter = Endpoint.fileGetter(public_folder);
+    const cwd = std.fs.cwd();
+
+    var dirs = std.ArrayList([]const u8).init(allocator);
+    defer dirs.deinit();
+
+    {
+        const pf_copy = try allocator.dupe(u8, "/");
+        errdefer allocator.free(pf_copy);
+        try dirs.append(pf_copy);
+    }
+
+    while (dirs.items.len > 0) {
+        const subdirpath = dirs.pop();
+        defer allocator.free(subdirpath);
+        const realpath = try std.fs.path.join(allocator, &.{ public_folder, subdirpath });
+        defer allocator.free(realpath);
+        var dir = try cwd.openIterableDir(realpath, .{});
+        defer dir.close();
+
+        var dir_iter = dir.iterate();
+        while (try dir_iter.next()) |n| {
+            const kind: std.fs.File.Kind = n.kind;
+            switch (kind) {
+                .file => {
+                    const filepath = try std.fs.path.join(allocator, &.{ subdirpath, n.name });
+                    defer allocator.free(filepath);
+                    try add(filepath, Endpoint{
+                        .get = getter,
+                    });
+                    std.debug.print("Added static file: {s}\n", .{filepath});
+                },
+                .directory => {
+                    const dirpath = try std.fs.path.join(allocator, &.{ subdirpath, n.name });
+                    errdefer allocator.free(dirpath);
+                    try dirs.append(dirpath);
+                },
+                else => {}, //ignored.
+            }
+        }
+    }
+
+    return;
 }
 
 var listener: Listener = undefined;

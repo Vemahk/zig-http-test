@@ -11,7 +11,6 @@ const Templater = @import("root").Templates.Templater;
 const Endpoint = @This();
 pub const RequestFn = *const fn (ctx: Context) anyerror!void;
 
-path: []const u8,
 get: ?RequestFn = null,
 post: ?RequestFn = null,
 put: ?RequestFn = null,
@@ -55,3 +54,15 @@ pub const Context = struct {
         self.request.markAsFinished(true);
     }
 };
+
+pub fn fileGetter(comptime dir: []const u8) RequestFn {
+    return struct {
+        pub fn get(self: Context) anyerror!void {
+            const path = self.request.path orelse return error.FileNotFound;
+            const file_path = try std.fs.path.join(self.allocator, &.{ dir, path });
+            defer self.allocator.free(file_path);
+
+            try self.request.sendFile(path);
+        }
+    }.get;
+}

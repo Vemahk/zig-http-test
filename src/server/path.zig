@@ -32,7 +32,11 @@ pub fn Paths(comptime T: type) type {
             };
         }
 
-        pub fn add(self: *Self, path: []const u8, value: T) !void {
+        pub fn add(self: *Self, path_in: []const u8, value: T) !void {
+            const a = self.paths.allocator;
+            const path = try a.dupe(u8, path_in);
+            errdefer a.free(path);
+
             try validatePath(path);
 
             for (self.paths.items) |kv| {
@@ -54,7 +58,13 @@ pub fn Paths(comptime T: type) type {
         }
 
         pub fn deinit(self: Self) void {
-            self.paths.deinit();
+            const paths = self.paths;
+
+            for (paths.items) |kv| {
+                paths.allocator.free(kv.path);
+            }
+
+            paths.deinit();
         }
     };
 }

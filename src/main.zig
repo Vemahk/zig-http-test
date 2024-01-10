@@ -37,8 +37,7 @@ fn run() !void {
     const decls = info.Struct.decls;
     inline for (decls) |decl| {
         const E = @field(Endpoints, decl.name);
-        try Listener.add(Endpoint{
-            .path = E.path,
+        try Listener.add(E.path, Endpoint{
             .get = if (@hasDecl(E, "get")) E.get else null,
             .post = if (@hasDecl(E, "post")) E.post else null,
             .put = if (@hasDecl(E, "put")) E.put else null,
@@ -46,6 +45,8 @@ fn run() !void {
             .patch = if (@hasDecl(E, "patch")) E.patch else null,
         });
     }
+
+    try Listener.buildStaticFileRoutes("share/static");
 
     // TLS D:
     //const tls = try zap.Tls.init(.{
