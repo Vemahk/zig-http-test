@@ -15,6 +15,9 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .main_pkg_path = main_path,
     });
+    const exe_opts = b.addOptions();
+    //exe_opts.addOption(bool, "help", b.option(bool, "help", "a test value") orelse false);
+    exe.addOptions("build_flags", exe_opts);
 
     // Add dependencies
     const mustache = b.dependency("mustache", .{
