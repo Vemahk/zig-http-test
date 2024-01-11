@@ -3,10 +3,10 @@
     .version = "0.0.1",
 
     .dependencies = .{
-        // zap v0.2.5
+        // zap v0.4.0
         .zap = .{
-            .url = "https://github.com/zigzap/zap/archive/refs/tags/v0.2.5.tar.gz",
-            .hash = "1220c33e0ecc01b862ff6d929a948f5a8b5526a66f8d883a6d10eaff1620b8d4d605",
+            .url = "https://github.com/zigzap/zap/archive/refs/tags/v0.4.0.tar.gz",
+            .hash = "1220a20e883195793cff0f298d647d35f675ad25e6556fe75b9ccabc98a349cbf082",
         },
         .mustache = .{
             .url = "https://github.com/batiati/mustache-zig/archive/bb01f187544d0e6efae768eff4f3629a993c8332.tar.gz",

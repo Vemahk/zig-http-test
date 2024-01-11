@@ -3,11 +3,11 @@ const Allocator = std.mem.Allocator;
 const AtomicBool = std.atomic.Atomic(bool);
 
 const zap = @import("zap");
-const Listener = zap.SimpleHttpListener;
-const ListenerSettings = zap.SimpleHttpListenerSettings;
+const Listener = zap.HttpListener;
+const ListenerSettings = zap.HttpListenerSettings;
 const Err = zap.EndpointListenerError;
-const Request = zap.SimpleRequest;
-const RequestFn = zap.SimpleHttpRequestFn;
+const Request = zap.Request;
+const RequestFn = zap.HttpRequestFn;
 
 const Endpoint = @import("endpoint.zig");
 

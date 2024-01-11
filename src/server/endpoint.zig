@@ -2,7 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const zap = @import("zap");
-const Request = zap.SimpleRequest;
+const Request = zap.Request;
 
 const mustache = @import("mustache");
 const ResourceId = @import("path.zig").ResourceId;

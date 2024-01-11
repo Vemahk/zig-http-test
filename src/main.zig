@@ -69,7 +69,7 @@ fn run() !void {
     });
 }
 
-fn notFound(req: zap.SimpleRequest) void {
+fn notFound(req: zap.Request) void {
     req.setStatus(zap.StatusCode.not_found);
 
     const Layout = Templates.Layout;
