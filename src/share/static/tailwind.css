@@ -13,10 +13,19 @@
         @apply text-2xl my-1.5;
     }
     a {
-        @apply text-blue-400 visited:text-purple-500 underline dark:font-bold;
+        @apply hover:underline underline-offset-4;
+        /* @apply text-blue-400 visited:text-purple-500 underline dark:font-bold; */
+    }
+
+    header, main, footer {
+        @apply w-full md:max-w-screen-md mx-auto border-gray-200 dark:border-gray-700 md:border-x;
+    }
+
+    header {
+        @apply border-b;
     }
 
     footer {
-        @apply sticky;
+        @apply sticky border-t;
     }
 }

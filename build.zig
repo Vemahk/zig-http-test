@@ -47,7 +47,7 @@ pub fn build(b: *std.Build) void {
     const tw_build = b.addSystemCommand(&[_][]const u8{
         ".build/tailwindcss",
         "-c",
-        ".build/tailwind.config.js",
+        ".config/tailwind.config.js",
         "-i",
         "./src/share/static/tailwind.css",
         "-o",
