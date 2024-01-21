@@ -49,9 +49,9 @@ pub fn build(b: *std.Build) void {
         "-c",
         ".config/tailwind.config.js",
         "-i",
-        "./src/share/static/tailwind.css",
+        "./src/share/static/styles/tailwind.src.css",
         "-o",
-        "./zig-out/share/static/tailwind.css",
+        "./zig-out/share/static/styles/tailwind.css",
     });
     tw_build.step.dependOn(tw_pull);
     tw_build.step.dependOn(&share_dir.step);
@@ -126,36 +126,4 @@ fn addStep(b: *std.Build, name: []const u8, description: []const u8, other: *std
     var step = b.step(name, description);
     step.dependOn(other);
     return step;
-}
-
-// I tried to use std.http but it doesn't support https.
-// rather, I had trouble getting it to work.
-fn graveyard(a: std.mem.Allocator, the_real_uri: std.Uri, dest_path: []const u8) !void {
-    const cwd = std.fs.cwd();
-    var client = std.http.Client{ .allocator = a };
-    defer client.deinit();
-
-    var headers = std.http.Headers.init(a);
-    defer headers.deinit();
-
-    var req = try client.request(.GET, the_real_uri, headers, .{});
-    defer req.deinit();
-    try req.start();
-    try req.wait();
-
-    var file = try cwd.createFile(dest_path, .{});
-
-    var buffer: [4096]u8 = undefined;
-    var reader = req.reader();
-    var writer = file.writer();
-
-    while (true) {
-        const read_len = try reader.read(&buffer);
-        if (read_len == 0)
-            break;
-        var index: usize = 0;
-        while (index < read_len) {
-            index += try writer.write(buffer[index..read_len]);
-        }
-    }
 }

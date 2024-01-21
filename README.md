@@ -1,6 +1,10 @@
 # Zig HTTP Server
 
-Made with [zig](https://ziglang.org/), [zap](https://github.com/zigzap/zap), [mustache-zig](https://github.com/batiati/mustache-zig), and [htmx](https://htmx.org/).
+Made with [zig](https://ziglang.org/),
+[zap](https://github.com/zigzap/zap),
+[mustache-zig](https://github.com/batiati/mustache-zig),
+[htmx](https://htmx.org/),
+and [tailwind](https://tailwindcss.com/).
 
 ## Purpose
 
