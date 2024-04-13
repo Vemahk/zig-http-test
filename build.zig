@@ -86,9 +86,22 @@ fn prepareTailwind(step: *std.Build.Step, progress: *std.Progress.Node) !void {
 
     // Get tailwind
     const b = step.owner;
+    const a = b.allocator;
     const tailwindcss_path = ".build/tailwindcss";
-    const tailwindss_uri = "https://github.com/tailwindlabs/tailwindcss/releases/download/v3.3.5/tailwindcss-linux-arm64";
-    try retrieveFile(b, tailwindss_uri, tailwindcss_path);
+    const tailwind_download_root = "https://github.com/tailwindlabs/tailwindcss/releases/download/v3.3.5";
+
+    const builder_target: std.Target = builtin.target;
+    const builder_triple = try builder_target.linuxTriple(a);
+    defer a.free(builder_triple);
+
+    std.debug.print("Builder triple: {s}\n", .{builder_triple});
+
+    const targets = std.ComptimeStringMap([]const u8, .{ .{ "x86_64-linux-gnu", "tailwindcss-linux-x64" }, .{ "aarch64-linux-gnu", "tailwindcss-linux-arm64" } });
+
+    const tailwindcss_uri = try std.fmt.allocPrint(a, "{s}/{s}", .{ tailwind_download_root, targets.get(builder_triple) orelse unreachable });
+    defer a.free(tailwindcss_uri);
+
+    try retrieveFile(b, tailwindcss_uri, tailwindcss_path);
 }
 
 fn retrieveFile(b: *std.Build, uri: []const u8, dest_path: []const u8) !void {
