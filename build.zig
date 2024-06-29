@@ -27,6 +27,12 @@ pub fn build(b: *std.Build) void {
     });
     exe.root_module.addImport("mustache", mustache.module("mustache"));
 
+    const koino_pkg = b.dependency("koino", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    exe.root_module.addImport("koino", koino_pkg.module("koino"));
+
     const zap = b.dependency("zap", .{
         .target = target,
         .optimize = optimize,
@@ -78,6 +84,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    unit_tests.root_module.addImport("koino", koino_pkg.module("koino"));
 
     const run_unit_tests = b.addRunArtifact(unit_tests);
     _ = addStep(b, "test", "Run unit tests", &run_unit_tests.step);

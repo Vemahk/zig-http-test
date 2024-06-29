@@ -95,4 +95,5 @@ fn notFound(req: zap.Request) void {
 
 test {
     _ = Templates;
+    _ = Endpoints.Story;
 }

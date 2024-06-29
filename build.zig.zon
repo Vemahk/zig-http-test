@@ -12,6 +12,14 @@
             .url = "https://github.com/batiati/mustache-zig/archive/ae5ecc1522da983dc39bb0d8b27f5d1b1d7956e3.tar.gz",
             .hash = "1220ac9e3316ce71ad9cd66c7f215462bf5c187828b50bb3d386549bf6af004e3bb0",
         },
+        .koino = .{
+            .url = "https://github.com/kivikakk/koino/archive/b70b1ef64ba56cbbc6fd8c2fb0df715591563c9a.tar.gz",
+            .hash = "1220554555d0e2430e1d4ded6dc05188d431c345890775983bf897a38e7ccde91eef",
+        },
     },
-    .paths = .{""},
+    .paths = .{
+        "src",
+        "README.md",
+        "LICENSE",
+    },
 }
