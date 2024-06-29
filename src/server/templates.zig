@@ -12,7 +12,7 @@ pub const Templater = struct {
 
 const mustache = @import("mustache");
 const Template = mustache.Template;
-const errored_template = mustache.parseComptime("Template Error", .{}, .{});
+const errored_template: Template = mustache.parseComptime("", .{}, .{});
 
 const is_debug = @import("builtin").mode == .Debug;
 

@@ -1,6 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const AtomicBool = std.atomic.Atomic(bool);
+const AtomicBool = std.atomic.Value(bool);
 
 const zap = @import("zap");
 const Listener = zap.HttpListener;
@@ -20,7 +20,7 @@ var router: Router = undefined;
 var not_found_handler: RequestFn = defaultNotFound;
 
 pub fn init(a: std.mem.Allocator, not_found: ?RequestFn) !void {
-    if (has_init.swap(true, .AcqRel))
+    if (has_init.swap(true, .acq_rel))
         return error.SingletonReinit;
 
     allocator = a;
@@ -55,7 +55,7 @@ pub fn buildStaticFileRoutes(comptime public_folder: []const u8) !void {
         defer allocator.free(subdirpath);
         const realpath = try std.fs.path.join(allocator, &.{ public_folder, subdirpath });
         defer allocator.free(realpath);
-        var dir = try cwd.openIterableDir(realpath, .{});
+        var dir = try cwd.openDir(realpath, .{ .iterate = true });
         defer dir.close();
 
         var dir_iter = dir.iterate();

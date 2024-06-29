@@ -14,9 +14,20 @@ pub fn main() !void {
 
     alloc = gpa.allocator();
 
-    const cwd = try std.fs.cwd().realpathAlloc(alloc, ".");
-    defer alloc.free(cwd);
-    std.debug.print("cwd: {s}\n", .{cwd});
+    {
+        const cwd = try std.fs.cwd().realpathAlloc(alloc, ".");
+        defer alloc.free(cwd);
+        std.debug.print("cwd: {s}\n", .{cwd});
+    }
+
+    {
+        var self = std.process.args();
+        var i: usize = 0;
+        while (self.next()) |arg| {
+            std.debug.print("Argument {d}: {s}\n", .{ i, arg });
+            i += 1;
+        }
+    }
 
     try run();
 }
