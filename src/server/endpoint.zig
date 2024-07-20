@@ -62,7 +62,7 @@ pub fn fileGetter(comptime dir: []const u8) RequestFn {
             const file_path = try std.fs.path.join(self.allocator, &.{ dir, path });
             defer self.allocator.free(file_path);
 
-            try self.request.sendFile(path);
+            try self.request.sendFile(file_path);
         }
     }.get;
 }

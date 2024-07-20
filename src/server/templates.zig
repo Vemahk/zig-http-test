@@ -1,3 +1,4 @@
+const root_path = "share/views/";
 pub const Layout = init(struct { title: []const u8, content: []const u8 }, .{ .file_path = "layout.html" });
 pub const Time = init(struct { timestamp: i64 }, .{ .file_path = "time.html" });
 
@@ -18,21 +19,12 @@ const is_debug = @import("builtin").mode == .Debug;
 
 const Options = struct {
     file_path: []const u8,
-    embed: bool = !is_debug,
 };
-
-const root_path = "share/views/";
 
 fn init(comptime T: type, comptime opts: Options) Templater {
     return Templater{
         .Data = T,
-        .get = if (opts.embed) struct {
-            const file_path = "../" ++ root_path ++ opts.file_path; // TODO this doesn't actually work :(
-            const template = mustache.parseComptime(@embedFile(file_path), .{}, .{});
-            pub fn get(_: Allocator) Template {
-                return template;
-            }
-        }.get else struct {
+        .get = struct {
             const file_path = root_path ++ opts.file_path;
             var tmpl: ?Template = null;
             pub fn get(allocator: Allocator) Template {
@@ -47,6 +39,8 @@ fn init(comptime T: type, comptime opts: Options) Templater {
             fn rebuild(allocator: Allocator) void {
                 lock.lock();
                 defer lock.unlock();
+                if (!should_rebuild()) return;
+
                 if (tmpl) |t| t.deinit(allocator);
                 tmpl = create(allocator) catch |err| blk: {
                     log.err("Failed to parse template {s} ({s})\n", .{ file_path, @errorName(err) });

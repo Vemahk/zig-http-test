@@ -3,28 +3,28 @@ pub const Templates = @import("server/templates.zig");
 pub const Endpoint = @import("server/endpoint.zig");
 
 const std = @import("std");
+const builtin = @import("builtin");
+const std_options = std.Options{};
+
+const log = std.log.scoped(.main);
 
 var alloc: std.mem.Allocator = undefined;
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = true }){};
-    defer {
-        const has_leaked = gpa.detectLeaks();
-        if (has_leaked) std.debug.print("Memory leaks detected!\n", .{});
-    }
-
+    defer _ = gpa.deinit();
     alloc = gpa.allocator();
 
     {
         const cwd = try std.fs.cwd().realpathAlloc(alloc, ".");
         defer alloc.free(cwd);
-        std.debug.print("cwd: {s}\n", .{cwd});
+        log.debug("cwd: {s}\n", .{cwd});
     }
 
     {
         var self = std.process.args();
         var i: usize = 0;
         while (self.next()) |arg| {
-            std.debug.print("Argument {d}: {s}\n", .{ i, arg });
+            log.debug("Argument {d}: {s}\n", .{ i, arg });
             i += 1;
         }
     }
@@ -59,19 +59,10 @@ fn run() !void {
 
     try Listener.buildStaticFileRoutes("share/static");
 
-    // TLS D:
-    //const tls = try zap.Tls.init(.{
-    //    .public_certificate_file = "~/.local/certs/vemahk.me.crt",
-    //    .private_key_file = "~/.local/certs/vemahk.me.key",
-    //});
-    //defer tls.deinit();
-
     try Listener.listen(.{
         .port = port,
         .on_request = null, // required here, but overriden by Listener.
         .log = true,
-        .public_folder = "share/static",
-        //.tls = tls,
     });
 
     zap.start(.{

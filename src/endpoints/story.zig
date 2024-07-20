@@ -3,10 +3,12 @@ const C = @import("_common.zig");
 const std = @import("std");
 const koino = @import("koino");
 
-pub const path = "/story";
+pub const path = "/story/*";
+const files = "share/stories";
 
 pub fn get(ctx: C.HttpContext) !void {
     const a = ctx.allocator;
+
     var body = std.ArrayList(u8).init(a);
     defer body.deinit();
     const body_writer = body.writer().any();
